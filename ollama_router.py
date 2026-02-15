@@ -10,6 +10,7 @@ Intelligent Ollama Router Proxy with Web Dashboard
 
 import os
 import json
+import time
 import requests
 import asyncio
 from typing import Optional, Dict, List
@@ -29,6 +30,27 @@ PROXY_PORT = int(os.getenv("PROXY_PORT", "9998"))  # Changed from 8000 to 9998
 PROXY_HOST = os.getenv("PROXY_HOST", "0.0.0.0")
 WEB_PORT = int(os.getenv("WEB_PORT", "9999"))
 WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0")
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "900"))  # Default 15 minutes timeout
+
+# Fallback configuration for each model
+MODEL_FALLBACKS = {
+    "qwen2.5-coder:7b": "qwen2.5:7b",
+    "deepseek-r1:latest": "qwen2.5:7b",
+    "llava:latest": "qwen2.5:7b",
+    "nemotron-3-nano:latest": "qwen2.5:7b",
+    "mistral:latest": "qwen2.5:7b",
+    "goonsai/qwen2.5-3B-goonsai-nsfw-100k:latest": "qwen2.5:7b",
+    "llama2-uncensored:latest": "qwen2.5:7b",
+}
+
+# Fallback from environment variable (JSON format)
+FALLBACK_ENV = os.getenv("MODEL_FALLBACKS", "")
+if FALLBACK_ENV:
+    try:
+        import json
+        MODEL_FALLBACKS.update(json.loads(FALLBACK_ENV))
+    except:
+        pass
 
 # Request/Response models
 class TaskRequest(BaseModel):
@@ -217,7 +239,7 @@ Respond with ONLY the category name, nothing else."""
         return None
     
     async def route_and_execute(self, prompt: str, task_type: Optional[str] = None, stream: bool = False) -> Dict:
-        """Classify task, select model, and execute"""
+        """Classify task, select model, and execute with fallback on timeout"""
         import time
         start_time = time.time()
         
@@ -234,15 +256,22 @@ Respond with ONLY the category name, nothing else."""
         print(f"\n🎯 Task Classification: {classification}")
         print(f"📍 Selected Model: {selected_model}")
         
+        # Try to execute with fallback on timeout
+        result = await self._execute_with_fallback(prompt, selected_model, stream, start_time, classification)
+        
+        return result
+    
+    async def _execute_with_fallback(self, prompt: str, model: str, stream: bool, start_time: float, classification: str) -> Dict:
+        """Execute request with fallback to alternative model on timeout"""
         try:
             response = requests.post(
                 f"{self.base_url}/api/generate",
                 json={
-                    "model": selected_model,
+                    "model": model,
                     "prompt": prompt,
                     "stream": stream
                 },
-                timeout=300
+                timeout=REQUEST_TIMEOUT
             )
             
             if response.status_code == 200:
@@ -250,11 +279,11 @@ Respond with ONLY the category name, nothing else."""
                 execution_time = time.time() - start_time
                 
                 # Record statistics
-                stats.record_request(selected_model, classification, execution_time)
+                stats.record_request(model, classification, execution_time)
                 
                 return {
                     "result": result,
-                    "model_used": selected_model,
+                    "model_used": model,
                     "task_classification": classification,
                     "timestamp": datetime.now().isoformat()
                 }
@@ -262,7 +291,14 @@ Respond with ONLY the category name, nothing else."""
                 raise HTTPException(status_code=response.status_code, detail="Model execution failed")
         
         except requests.exceptions.Timeout:
-            raise HTTPException(status_code=504, detail="Model execution timeout")
+            # Timeout occurred - try fallback model
+            fallback_model = MODEL_FALLBACKS.get(model)
+            if fallback_model and fallback_model in self.available_models:
+                print(f"⚠️ Timeout with model {model}, trying fallback: {fallback_model}")
+                return await self._execute_with_fallback(prompt, fallback_model, stream, start_time, classification)
+            else:
+                print(f"❌ Timeout with model {model} and no fallback available")
+                raise HTTPException(status_code=504, detail=f"Model execution timeout. No fallback model configured for {model}")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -355,6 +391,29 @@ async def get_statistics():
     """Get usage statistics"""
     return stats.to_dict()
 
+@api_app.get("/config/fallbacks")
+async def get_fallbacks():
+    """Get model fallback configuration"""
+    return {
+        "fallbacks": MODEL_FALLBACKS,
+        "timeout": REQUEST_TIMEOUT
+    }
+
+@api_app.post("/config/fallbacks")
+async def update_fallbacks(request: dict):
+    """Update model fallback configuration"""
+    global MODEL_FALLBACKS
+    if "fallbacks" in request:
+        MODEL_FALLBACKS.update(request["fallbacks"])
+    if "timeout" in request:
+        global REQUEST_TIMEOUT
+        REQUEST_TIMEOUT = int(request["timeout"])
+    return {
+        "status": "updated",
+        "fallbacks": MODEL_FALLBACKS,
+        "timeout": REQUEST_TIMEOUT
+    }
+
 # ============================================================================
 # WEB DASHBOARD ENDPOINTS (Port 9999)
 # ============================================================================
@@ -377,6 +436,14 @@ async def serve_dashboard():
 async def api_get_stats():
     """API endpoint for statistics (for dashboard)"""
     return stats.to_dict()
+
+@web_app.get("/api/config/fallbacks")
+async def web_get_fallbacks():
+    """API endpoint for fallback configuration (for dashboard)"""
+    return {
+        "fallbacks": MODEL_FALLBACKS,
+        "timeout": REQUEST_TIMEOUT
+    }
 
 @web_app.get("/api/models")
 async def api_list_models():

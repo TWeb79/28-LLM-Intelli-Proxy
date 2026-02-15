@@ -87,6 +87,12 @@ let stats = {
     last_update: new Date()
 };
 
+// Fallback configuration
+let fallbackConfig = {
+    fallbacks: {},
+    timeout: 300
+};
+
 // Fetch statistics from server
 async function updateStats() {
     try {
@@ -98,6 +104,53 @@ async function updateStats() {
     } catch (error) {
         console.log('Stats not available yet');
     }
+}
+
+// Fetch fallback configuration from server
+async function updateFallbackConfig() {
+    try {
+        const response = await fetch(`${APP_CONFIG.apiUrl}/config/fallbacks`);
+        if (response.ok) {
+            fallbackConfig = await response.json();
+            renderFallbackConfig();
+        }
+    } catch (error) {
+        console.log('Fallback config not available');
+    }
+}
+
+// Render fallback configuration
+function renderFallbackConfig() {
+    const container = document.getElementById('fallback-config');
+    if (!container) return;
+    
+    let html = `
+        <div class="stats-header">
+            <h3>🔄 Fallback Configuration</h3>
+            <p>Timeout: <strong>${fallbackConfig.timeout}s</strong></p>
+        </div>
+        <div class="fallback-grid">
+    `;
+    
+    const fallbacks = fallbackConfig.fallbacks || {};
+    if (Object.keys(fallbacks).length === 0) {
+        html += '<p style="text-align: center; color: #999;">No fallback models configured</p>';
+    } else {
+        Object.entries(fallbacks).forEach(([model, fallback]) => {
+            const modelName = FEATURE_MATRIX[model]?.name || model;
+            const fallbackName = FEATURE_MATRIX[fallback]?.name || fallback;
+            html += `
+                <div class="fallback-card">
+                    <div class="fallback-model">${modelName}</div>
+                    <div class="fallback-arrow">→</div>
+                    <div class="fallback-target">${fallbackName}</div>
+                </div>
+            `;
+        });
+    }
+    
+    html += '</div>';
+    container.innerHTML = html;
 }
 
 // Render dashboard
@@ -238,17 +291,81 @@ function getCategoryColor(category) {
     return colors[category] || '#6b7280';
 }
 
-// Tab switching
+// Fallback configuration styles (to be added to CSS)
+const FALLBACK_STYLES = `
+    .fallback-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+    }
+    
+    .fallback-card {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: 1px solid #f59e0b;
+        border-radius: 12px;
+        padding: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    
+    .fallback-model {
+        font-weight: 600;
+        color: #1f2937;
+        font-size: 0.9em;
+        flex: 1;
+    }
+    
+    .fallback-arrow {
+        color: #f59e0b;
+        font-size: 1.2em;
+    }
+    
+    .fallback-target {
+        font-weight: 600;
+        color: #059669;
+        font-size: 0.9em;
+        flex: 1;
+        text-align: right;
+    }
+`;
+
+// Inject styles
+const styleSheet = document.createElement('style');
+styleSheet.textContent = FALLBACK_STYLES;
+document.head.appendChild(styleSheet);
+
+// Tab switching - simplified version
 function switchTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(tab => {
+    console.log('Switching to tab:', tabName);
+    
+    // Hide all tab contents
+    const allTabs = document.querySelectorAll('.tab-content');
+    allTabs.forEach(tab => {
         tab.style.display = 'none';
     });
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    
+    // Remove active class from all buttons
+    const allButtons = document.querySelectorAll('.tab-btn');
+    allButtons.forEach(btn => {
         btn.classList.remove('active');
     });
     
-    document.getElementById(`tab-${tabName}`).style.display = 'block';
-    event.target.classList.add('active');
+    // Show selected tab content
+    const selectedTab = document.getElementById('tab-' + tabName);
+    if (selectedTab) {
+        selectedTab.style.display = 'block';
+    }
+    
+    // Add active class to clicked button (find by onclick attribute)
+    const buttons = document.querySelectorAll('.tab-btn');
+    buttons.forEach(btn => {
+        if (btn.getAttribute('onclick') && btn.getAttribute('onclick').indexOf(tabName) !== -1) {
+            btn.classList.add('active');
+        }
+    });
 }
 
 // Code examples
@@ -268,7 +385,9 @@ function copyToClipboard(elementId) {
 document.addEventListener('DOMContentLoaded', () => {
     renderDashboard();
     updateStats();
+    updateFallbackConfig();
     
     // Update stats every 5 seconds
     setInterval(updateStats, 5000);
+    setInterval(updateFallbackConfig, 10000);
 });

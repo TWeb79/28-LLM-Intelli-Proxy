@@ -12,25 +12,26 @@ from tabulate import tabulate
 class OllamaRouterClient:
     """Client for the Intelligent Router Proxy"""
     
-    def __init__(self, router_url: str = "http://localhost:8000"):
+    def __init__(self, router_url: str = "http://192.168.6.149:9998", timeout: int = 600):
         self.router_url = router_url.rstrip("/")
         self.session = requests.Session()
+        self.timeout = timeout  # Default 10 minutes timeout for LLM requests
     
     def health_check(self) -> Dict:
         """Check router health"""
-        response = self.session.get(f"{self.router_url}/health")
+        response = self.session.get(f"{self.router_url}/health", timeout=30)
         response.raise_for_status()
         return response.json()
     
     def list_models(self) -> Dict:
         """List all available models"""
-        response = self.session.get(f"{self.router_url}/models")
+        response = self.session.get(f"{self.router_url}/models", timeout=30)
         response.raise_for_status()
         return response.json()
     
     def list_models_by_category(self, category: str) -> List[str]:
         """List models in a specific category"""
-        response = self.session.get(f"{self.router_url}/models/{category}")
+        response = self.session.get(f"{self.router_url}/models/{category}", timeout=30)
         response.raise_for_status()
         return response.json()["models"]
     
@@ -38,7 +39,8 @@ class OllamaRouterClient:
         """Classify a task (without executing)"""
         response = self.session.post(
             f"{self.router_url}/classify",
-            json={"prompt": prompt}
+            json={"prompt": prompt},
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()
@@ -61,7 +63,8 @@ class OllamaRouterClient:
                 "prompt": prompt,
                 "task_type": task_type,
                 "stream": stream
-            }
+            },
+            timeout=self.timeout
         )
         response.raise_for_status()
         return response.json()
