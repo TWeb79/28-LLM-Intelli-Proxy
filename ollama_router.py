@@ -867,7 +867,32 @@ async def generate_with_stream(request: GenerateRequest):
                 "done": True
             }
         else:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
+            # Check for memory errors - try fallback
+            error_detail = response.text
+            memory_keywords = ["memory", "requires more", "not available", "failed to load", "does not have enough"]
+            if any(keyword in error_detail.lower() for keyword in memory_keywords):
+                fallback = MODEL_FALLBACKS.get(model_to_use)
+                if fallback and fallback != model_to_use:
+                    print(f"⚠️ Memory error with {model_to_use}, trying fallback: {fallback}")
+                    ollama_request["model"] = fallback
+                    try:
+                        response = requests.post(
+                            f"{OLLAMA_BASE_URL}/api/generate",
+                            json=ollama_request,
+                            timeout=REQUEST_TIMEOUT
+                        )
+                        if response.status_code == 200:
+                            result = response.json()
+                            execution_time = time.time() - start_time
+                            stats.record_request(fallback, classification, execution_time, request.prompt or "")
+                            return {
+                                "model": fallback,
+                                "response": result.get("response", ""),
+                                "done": True
+                            }
+                    except:
+                        pass
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
             
     except requests.exceptions.Timeout:
         fallback = MODEL_FALLBACKS.get(model_to_use)
@@ -978,7 +1003,33 @@ async def chat_with_stream(request: ChatRequest):
                 "done": True
             }
         else:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
+            # Check for memory errors - try fallback
+            error_detail = response.text
+            memory_keywords = ["memory", "requires more", "not available", "failed to load", "does not have enough"]
+            if any(keyword in error_detail.lower() for keyword in memory_keywords):
+                fallback = MODEL_FALLBACKS.get(model_to_use)
+                if fallback and fallback != model_to_use:
+                    print(f"⚠️ Memory error with {model_to_use}, trying fallback: {fallback}")
+                    ollama_request["model"] = fallback
+                    try:
+                        response = requests.post(
+                            f"{OLLAMA_BASE_URL}/api/chat",
+                            json=ollama_request,
+                            timeout=REQUEST_TIMEOUT
+                        )
+                        if response.status_code == 200:
+                            result = response.json()
+                            execution_time = time.time() - start_time
+                            prompt = " ".join([msg.content for msg in request.messages])
+                            stats.record_request(fallback, classification, execution_time, prompt)
+                            return {
+                                "model": fallback,
+                                "message": result.get("message", {"role": "assistant", "content": ""}),
+                                "done": True
+                            }
+                    except:
+                        pass
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
             
     except requests.exceptions.Timeout:
         fallback = MODEL_FALLBACKS.get(model_to_use)
