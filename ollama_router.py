@@ -72,6 +72,8 @@ class Statistics:
         self.categories = defaultdict(int)
         self.last_update = datetime.now()
         self.lock = threading.Lock()
+        self.recent_requests = []  # Last 50 requests for debug
+        self.max_recent = 50
     
     def record_request(self, model: str, category: str, execution_time: float = 0):
         with self.lock:
@@ -80,6 +82,17 @@ class Statistics:
             self.models[model]["total_time"] += execution_time
             self.categories[category] += 1
             self.last_update = datetime.now()
+            
+            # Add to recent requests (no response logged, just model and classification)
+            self.recent_requests.append({
+                "model_used": model,
+                "task_classification": category,
+                "timestamp": self.last_update.isoformat()
+            })
+            
+            # Keep only last 50 requests
+            if len(self.recent_requests) > self.max_recent:
+                self.recent_requests = self.recent_requests[-self.max_recent:]
     
     def to_dict(self):
         with self.lock:
@@ -89,6 +102,10 @@ class Statistics:
                 "categories": dict(self.categories),
                 "last_update": self.last_update.isoformat()
             }
+    
+    def get_recent(self):
+        with self.lock:
+            return list(self.recent_requests)
 
 # Initialize statistics
 stats = Statistics()
@@ -412,6 +429,13 @@ async def update_fallbacks(request: dict):
         "status": "updated",
         "fallbacks": MODEL_FALLBACKS,
         "timeout": REQUEST_TIMEOUT
+    }
+
+@api_app.get("/requests")
+async def get_requests():
+    """Get recent request log (last 50)"""
+    return {
+        "recent": stats.get_recent()
     }
 
 # ============================================================================
