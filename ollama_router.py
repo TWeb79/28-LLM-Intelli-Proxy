@@ -48,6 +48,7 @@ PROXY_HOST = os.getenv("PROXY_HOST", "0.0.0.0")
 WEB_PORT = int(os.getenv("WEB_PORT", "9999"))
 WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0")
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "900"))  # Default 15 minutes timeout
+ENABLE_AUTO_DISCOVERY = os.getenv("ENABLE_AUTO_DISCOVERY", "true").lower() == "true"
 
 # Fallback configuration for each model
 MODEL_FALLBACKS = {
@@ -80,6 +81,47 @@ class TaskResponse(BaseModel):
     model_used: str
     task_classification: str
     timestamp: str
+
+# Ollama-compatible request/response models
+class GenerateRequest(BaseModel):
+    model: str
+    prompt: Optional[str] = None
+    images: Optional[List[str]] = None
+    stream: bool = False
+    options: Optional[Dict] = None
+    system: Optional[str] = None
+    template: Optional[str] = None
+    context: Optional[List[int]] = None
+
+class GenerateResponse(BaseModel):
+    model: str
+    response: str
+    done: bool = True
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+    images: Optional[List[str]] = None
+
+class ChatRequest(BaseModel):
+    model: str
+    messages: List[ChatMessage]
+    stream: bool = False
+    options: Optional[Dict] = None
+    system: Optional[str] = None
+    template: Optional[str] = None
+    context: Optional[List[int]] = None
+
+class ChatResponse(BaseModel):
+    model: str
+    message: ChatMessage
+    done: bool = True
+
+class ModelInfo(BaseModel):
+    name: str
+    modified_at: str
+    size: int
+    description: Optional[str] = None
 
 # Statistics tracking
 class Statistics:
@@ -241,6 +283,80 @@ class OllamaRouter:
         for category, models in self.model_categories.items():
             if models:
                 print(f"  {category}: {', '.join(models)}")
+
+    async def discover_model_attributes(self, model_name: str) -> Dict:
+        """
+        Automatically discover attributes for an unknown model by asking an LLM.
+        Uses the classifier model to analyze and return speed, complexity, and preferred_for.
+        """
+        if not ENABLE_AUTO_DISCOVERY:
+            return {"speed": 5, "complexity": 5, "preferred_for": ["general"]}
+        
+        analysis_prompt = f"""Analyze this Ollama model name and respond with a JSON object containing its attributes.
+
+Model name: {model_name}
+
+Respond ONLY with valid JSON in this exact format, nothing else:
+{{"speed": <1-10>, "complexity": <1-10>, "preferred_for": ["category1", "category2"]}}
+
+Rules:
+- speed: 1=slowest, 10=fastest (estimate based on model size and name)
+- complexity: 1=simple tasks only, 10=can handle very complex tasks
+- preferred_for: array of categories this model is good for (code, reasoning, vision, general, image, uncensored, conversation, writing, analysis)
+
+Consider:
+- Smaller models (1-4B params) are faster but less capable
+- Larger models (7B+) are slower but more capable
+- Code-specific models have "code" or "coder" in name
+- Vision models have "vision", "llava", or "vision" in name
+- Reasoning models have "r1", "reasoning", or "math" in name
+- Uncensored models often have "uncensored" or similar in name
+
+JSON:"""
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": CLASSIFIER_MODEL,
+                    "prompt": analysis_prompt,
+                    "stream": False
+                },
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                raw_response = result.get("response", "").strip()
+                
+                # Try to parse JSON from response
+                try:
+                    # Find JSON in response (might have extra text)
+                    import re
+                    json_match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+                    if json_match:
+                        attrs = json.loads(json_match.group())
+                        
+                        # Validate and normalize
+                        speed = max(1, min(10, int(attrs.get("speed", 5))))
+                        complexity = max(1, min(10, int(attrs.get("complexity", 5))))
+                        preferred_for = attrs.get("preferred_for", ["general"])
+                        
+                        print(f"🔍 Auto-discovered attributes for {model_name}: speed={speed}, complexity={complexity}")
+                        
+                        return {
+                            "speed": speed,
+                            "complexity": complexity,
+                            "preferred_for": preferred_for
+                        }
+                except (json.JSONDecodeError, AttributeError) as e:
+                    print(f"⚠️ Failed to parse model attributes for {model_name}: {e}")
+                    
+        except Exception as e:
+            print(f"⚠️ Error discovering model attributes for {model_name}: {e}")
+        
+        # Default attributes if discovery fails
+        return {"speed": 5, "complexity": 5, "preferred_for": ["general"]}
     
     async def classify_task(self, prompt: str) -> str:
         """Use lightweight LLM to classify the task"""
@@ -318,7 +434,20 @@ Respond with ONLY the category name, nothing else."""
         best_score = -1
         
         for model in category_models:
-            attrs = MODEL_ATTRIBUTES.get(model, {"speed": 5, "complexity": 5, "preferred_for": []})
+            # Get model attributes, auto-discover if unknown
+            if model not in MODEL_ATTRIBUTES:
+                if ENABLE_AUTO_DISCOVERY and model in self.available_models:
+                    # Trigger async discovery (will be cached in MODEL_ATTRIBUTES)
+                    import asyncio
+                    try:
+                        attrs = asyncio.run(self.discover_model_attributes(model))
+                        MODEL_ATTRIBUTES[model] = attrs
+                    except:
+                        attrs = {"speed": 5, "complexity": 5, "preferred_for": ["general"]}
+                else:
+                    attrs = {"speed": 5, "complexity": 5, "preferred_for": ["general"]}
+            else:
+                attrs = MODEL_ATTRIBUTES.get(model, {"speed": 5, "complexity": 5, "preferred_for": []})
             
             # Score: prefer model where complexity >= prompt_complexity (can handle it)
             # and speed is high if prompt is simple
@@ -593,6 +722,327 @@ async def clear_requests():
     """Clear the request log"""
     stats.clear_recent()
     return {"status": "cleared"}
+
+# ============================================================================
+# OLLAMA-COMPATIBLE ENDPOINTS (Transparent Proxy)
+# ============================================================================
+
+INTELLI_PROXY_MODEL = "IntelliProxyLLM"
+DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "qwen2.5:7b")
+
+@api_app.get("/api/tags")
+async def list_models_ollama():
+    """List available models including IntelliProxyLLM with auto-discovered attributes"""
+    models = []
+    
+    # Add real models from Ollama with attributes
+    for name, info in router.available_models.items():
+        # Get or discover attributes for unknown models
+        if name not in MODEL_ATTRIBUTES and ENABLE_AUTO_DISCOVERY:
+            try:
+                import asyncio
+                attrs = asyncio.run(router.discover_model_attributes(name))
+                MODEL_ATTRIBUTES[name] = attrs
+            except:
+                attrs = {"speed": 5, "complexity": 5, "preferred_for": ["general"]}
+        
+        model_data = {
+            "name": name,
+            "modified_at": info.get("modified", datetime.now().isoformat()),
+            "size": info.get("size", 0)
+        }
+        
+        # Add attributes if available
+        if name in MODEL_ATTRIBUTES:
+            model_data.update(MODEL_ATTRIBUTES[name])
+        
+        models.append(model_data)
+    
+    # Add IntelliProxyLLM for intelligent routing
+    models.append({
+        "name": INTELLI_PROXY_MODEL,
+        "modified_at": datetime.now().isoformat(),
+        "size": 0,
+        "description": "Intelligent routing - proxy selects best model based on task",
+        "speed": 0,
+        "complexity": 0,
+        "preferred_for": ["auto"]
+    })
+    
+    return {"models": models}
+
+# ============================================================================
+# STREAMING ENDPOINTS
+# ============================================================================
+
+@api_app.post("/api/generate")
+async def generate_with_stream(request: GenerateRequest):
+    """
+    Ollama-compatible generate endpoint with intelligent routing.
+    Supports both streaming and non-streaming requests.
+    """
+    from fastapi.responses import StreamingResponse
+    import time
+    
+    # Determine which model to use
+    model_to_use = request.model
+    classification = "general"
+    
+    if model_to_use == INTELLI_PROXY_MODEL or not model_to_use:
+        prompt = request.prompt or ""
+        if prompt:
+            classification = await router.classify_task(prompt)
+            model_to_use = router._select_best_model(classification, prompt)
+        else:
+            model_to_use = DEFAULT_MODEL
+    
+    if not model_to_use:
+        model_to_use = DEFAULT_MODEL
+    
+    # Handle streaming
+    if request.stream:
+        ollama_request = {
+            "model": model_to_use,
+            "prompt": request.prompt or "",
+            "stream": True
+        }
+        if request.options:
+            ollama_request["options"] = request.options
+        if request.system:
+            ollama_request["system"] = request.system
+        if request.images:
+            ollama_request["images"] = request.images
+        
+        def generate_stream():
+            try:
+                response = requests.post(
+                    f"{OLLAMA_BASE_URL}/api/generate",
+                    json=ollama_request,
+                    stream=True,
+                    timeout=REQUEST_TIMEOUT
+                )
+                
+                if response.status_code == 200:
+                    for line in response.iter_lines():
+                        if line:
+                            yield f"data: {line.decode('utf-8')}\n\n"
+                else:
+                    yield f"data: {json.dumps({'error': response.text})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            finally:
+                yield "data: [DONE]\n\n"
+        
+        return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    
+    # Non-streaming request
+    start_time = time.time()
+    ollama_request = {
+        "model": model_to_use,
+        "prompt": request.prompt or "",
+        "stream": False
+    }
+    if request.options:
+        ollama_request["options"] = request.options
+    if request.system:
+        ollama_request["system"] = request.system
+    if request.images:
+        ollama_request["images"] = request.images
+    
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json=ollama_request,
+            timeout=REQUEST_TIMEOUT
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            execution_time = time.time() - start_time
+            stats.record_request(model_to_use, classification, execution_time, request.prompt or "")
+            
+            return {
+                "model": model_to_use,
+                "response": result.get("response", ""),
+                "done": True
+            }
+        else:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+            
+    except requests.exceptions.Timeout:
+        fallback = MODEL_FALLBACKS.get(model_to_use)
+        if fallback:
+            ollama_request["model"] = fallback
+            response = requests.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json=ollama_request,
+                timeout=REQUEST_TIMEOUT
+            )
+            if response.status_code == 200:
+                result = response.json()
+                execution_time = time.time() - start_time
+                stats.record_request(fallback, classification, execution_time, request.prompt or "")
+                return {
+                    "model": fallback,
+                    "response": result.get("response", ""),
+                    "done": True
+                }
+        raise HTTPException(status_code=504, detail="Model execution timeout")
+
+@api_app.post("/api/chat")
+async def chat_with_stream(request: ChatRequest):
+    """
+    Ollama-compatible chat endpoint with intelligent routing.
+    Supports both streaming and non-streaming requests.
+    """
+    from fastapi.responses import StreamingResponse
+    import time
+    
+    # Determine which model to use
+    model_to_use = request.model
+    classification = "general"
+    
+    if model_to_use == INTELLI_PROXY_MODEL or not model_to_use:
+        prompt = " ".join([msg.content for msg in request.messages])
+        if prompt:
+            classification = await router.classify_task(prompt)
+            model_to_use = router._select_best_model(classification, prompt)
+        else:
+            model_to_use = DEFAULT_MODEL
+    
+    if not model_to_use:
+        model_to_use = DEFAULT_MODEL
+    
+    # Handle streaming
+    if request.stream:
+        ollama_request = {
+            "model": model_to_use,
+            "messages": [msg.dict() for msg in request.messages],
+            "stream": True
+        }
+        if request.options:
+            ollama_request["options"] = request.options
+        if request.system:
+            ollama_request["system"] = request.system
+        
+        def chat_stream():
+            try:
+                response = requests.post(
+                    f"{OLLAMA_BASE_URL}/api/chat",
+                    json=ollama_request,
+                    stream=True,
+                    timeout=REQUEST_TIMEOUT
+                )
+                
+                if response.status_code == 200:
+                    for line in response.iter_lines():
+                        if line:
+                            yield f"data: {line.decode('utf-8')}\n\n"
+                else:
+                    yield f"data: {json.dumps({'error': response.text})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            finally:
+                yield "data: [DONE]\n\n"
+        
+        return StreamingResponse(chat_stream(), media_type="text/event-stream")
+    
+    # Non-streaming request
+    start_time = time.time()
+    ollama_request = {
+        "model": model_to_use,
+        "messages": [msg.dict() for msg in request.messages],
+        "stream": False
+    }
+    if request.options:
+        ollama_request["options"] = request.options
+    if request.system:
+        ollama_request["system"] = request.system
+    
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=ollama_request,
+            timeout=REQUEST_TIMEOUT
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            execution_time = time.time() - start_time
+            prompt = " ".join([msg.content for msg in request.messages])
+            stats.record_request(model_to_use, classification, execution_time, prompt)
+            
+            return {
+                "model": model_to_use,
+                "message": result.get("message", {"role": "assistant", "content": ""}),
+                "done": True
+            }
+        else:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+            
+    except requests.exceptions.Timeout:
+        fallback = MODEL_FALLBACKS.get(model_to_use)
+        if fallback:
+            ollama_request["model"] = fallback
+            response = requests.post(
+                f"{OLLAMA_BASE_URL}/api/chat",
+                json=ollama_request,
+                timeout=REQUEST_TIMEOUT
+            )
+            if response.status_code == 200:
+                result = response.json()
+                execution_time = time.time() - start_time
+                prompt = " ".join([msg.content for msg in request.messages])
+                stats.record_request(fallback, classification, execution_time, prompt)
+                return {
+                    "model": fallback,
+                    "message": result.get("message", {"role": "assistant", "content": ""}),
+                    "done": True
+                }
+        raise HTTPException(status_code=504, detail="Model execution timeout")
+
+# ============================================================================
+# ADDITIONAL OLLAMA COMPATIBLE ENDPOINTS (Transparent Forwarding)
+# ============================================================================
+
+@api_app.post("/api/pull")
+async def pull_model(request: dict):
+    """Forward pull model request to Ollama"""
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/pull",
+            json=request,
+            timeout=REQUEST_TIMEOUT
+        )
+        return response.json() if response.status_code == 200 else {"error": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_app.delete("/api/delete")
+async def delete_model(request: dict):
+    """Forward delete model request to Ollama"""
+    try:
+        response = requests.delete(
+            f"{OLLAMA_BASE_URL}/api/delete",
+            json=request,
+            timeout=REQUEST_TIMEOUT
+        )
+        return response.json() if response.status_code == 200 else {"error": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_app.post("/api/embeddings")
+async def embeddings(request: dict):
+    """Forward embeddings request to Ollama"""
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/embeddings",
+            json=request,
+            timeout=REQUEST_TIMEOUT
+        )
+        return response.json() if response.status_code == 200 else {"error": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # WEB DASHBOARD ENDPOINTS (Port 9999)

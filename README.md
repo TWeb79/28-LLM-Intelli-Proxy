@@ -1,6 +1,6 @@
 # Ollama Intelligent Router Proxy
 
-An intelligent LLM routing proxy for Ollama with automatic model selection, load balancing, and failover capabilities.
+An intelligent LLM routing proxy for Ollama with automatic model selection, load balancing, failover capabilities, and **transparent Ollama API compatibility**.
 
 ## Table of Contents
 
@@ -25,6 +25,19 @@ An intelligent LLM routing proxy for Ollama with automatic model selection, load
   - Task category (code, reasoning, general, vision, image, uncensored)
   - Prompt complexity (1-10)
   - Model speed and capabilities
+
+### Transparent Ollama API Compatibility
+- **Ollama-compatible endpoints** - any Ollama client can connect directly
+- Use `IntelliProxyLLM` model name for intelligent routing
+- Works with existing Ollama software without code changes
+- Full streaming support
+
+### Auto-Discovery of Model Attributes
+- Automatically discovers attributes for unknown models
+- Uses LLM to analyze model names and determine:
+  - Speed (1-10)
+  - Complexity (1-10)
+  - Preferred categories
 
 ### Load Balancing
 - Automatic distribution of requests across multiple Ollama backends
@@ -51,7 +64,7 @@ An intelligent LLM routing proxy for Ollama with automatic model selection, load
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
 │   Client    │────▶│  Router Proxy   │────▶│   Ollama    │
-│  (curl/API) │     │   (Port 9998)   │     │ (Port 11434)│
+│ (Ollama API)│     │   (Port 9998)   │     │ (Port 11434)│
 └─────────────┘     └──────────────────┘     └─────────────┘
                            │
                     ┌──────┴──────┐
@@ -59,6 +72,8 @@ An intelligent LLM routing proxy for Ollama with automatic model selection, load
                     │ (Port 9999)  │
                     └─────────────┘
 ```
+
+Clients can now use standard Ollama API - just connect to port 9998 instead of 11434!
 
 ## Prerequisites
 
@@ -121,6 +136,8 @@ Open http://localhost:9999 in your browser.
 | `WEB_HOST` | 0.0.0.0 | Dashboard host binding |
 | `REQUEST_TIMEOUT` | 900 | Timeout in seconds (15 min) |
 | `MODEL_FALLBACKS` | (JSON) | Fallback configuration |
+| `DEFAULT_MODEL` | qwen2.5:7b | Default model when no routing |
+| `ENABLE_AUTO_DISCOVERY` | true | Auto-discover model attributes |
 
 ## API Endpoints
 
@@ -190,7 +207,83 @@ curl -s -X POST http://localhost:9998/config/fallbacks \
   -d '{"fallbacks":{"deepseek-r1:latest":"qwen2.5:7b"},"timeout":300}'
 ```
 
-### API Response Formats
+---
+
+## Ollama-Compatible API Endpoints
+
+The proxy now supports the standard Ollama API - any software that works with Ollama can connect to the proxy directly!
+
+### Get Models (with IntelliProxyLLM)
+
+```bash
+curl -s http://localhost:9998/api/tags
+```
+
+Response includes `IntelliProxyLLM` for intelligent routing:
+```json
+{
+  "models": [
+    {
+      "name": "qwen2.5:7b",
+      "size": 4700000000,
+      "speed": 8,
+      "complexity": 6,
+      "preferred_for": ["general", "qa"]
+    },
+    {
+      "name": "IntelliProxyLLM",
+      "size": 0,
+      "description": "Intelligent routing - proxy selects best model based on task"
+    }
+  ]
+}
+```
+
+### Generate (with intelligent routing)
+
+```bash
+# Use IntelliProxyLLM for automatic model selection
+curl -s -X POST http://localhost:9998/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model": "IntelliProxyLLM", "prompt": "Explain quantum computing"}'
+
+# Or use a specific model directly
+curl -s -X POST http://localhost:9998/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen2.5:7b", "prompt": "Hello!"}'
+```
+
+### Chat (with intelligent routing)
+
+```bash
+curl -s -X POST http://localhost:9998/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "IntelliProxyLLM",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+### Streaming Support
+
+Both `/api/generate` and `/api/chat` support streaming:
+
+```bash
+curl -s -X POST http://localhost:9998/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"model": "IntelliProxyLLM", "prompt": "Write a story", "stream": true}'
+```
+
+### Other Ollama Endpoints (Transparent Forwarding)
+
+These are forwarded directly to Ollama:
+- `POST /api/pull` - Pull models
+- `DELETE /api/delete` - Delete models
+- `POST /api/embeddings` - Generate embeddings
+
+---
+
+## API Response Formats
 
 #### POST /task Response
 
