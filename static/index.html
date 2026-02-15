@@ -189,7 +189,7 @@
         <div class="card">
             <h3>Usage by Model</h3>
             <table id="model-stats">
-                <thead><tr><th>Model</th><th>Requests</th><th>%</th></tr></thead>
+                <thead><tr><th>Model</th><th>Requests</th><th>Avg Time (s)</th><th>%</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -197,6 +197,13 @@
             <h3>Categories</h3>
             <table id="category-stats">
                 <thead><tr><th>Category</th><th>Requests</th><th>%</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="card">
+            <h3>Performance Metrics</h3>
+            <table id="metrics-stats">
+                <thead><tr><th>Model</th><th>Avg Response Time</th><th>Speed</th><th>Complexity</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -215,34 +222,120 @@
         <div class="card" style="margin-bottom:16px;">
             <p><strong>Base URL:</strong> <code id="api-base-url">http://HOST_IP:9998</code></p>
         </div>
+        
+        <!-- Health Check -->
+        <div class="card">
+            <h3>Health Check</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Check router and Ollama status</p>
+            <pre>GET /health</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s http://localhost:9998/health</pre>
+        </div>
+        
+        <!-- Get Models -->
+        <div class="card">
+            <h3>Get All Models</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">List all available models with attributes (speed, complexity)</p>
+            <pre>GET /models</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s http://localhost:9998/models</pre>
+        </div>
+        
+        <!-- Get Models by Category -->
+        <div class="card">
+            <h3>Get Models by Category</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">List models in a specific category</p>
+            <pre>GET /models/{category}</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s http://localhost:9998/models/general</pre>
+        </div>
+        
+        <!-- Process Task -->
         <div class="card">
             <h3>Process Task</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Process a task with intelligent routing. Auto-classifies if task_type is null.</p>
             <pre>POST /task
 {
   "prompt": "Your prompt here",
   "task_type": null,  // auto-classify
   "stream": false
 }</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s -X POST http://localhost:9998/task \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Hello","task_type":"general"}'</pre>
         </div>
+        
+        <!-- Classify Only -->
         <div class="card">
-            <h3>Get Models</h3>
-            <pre>GET /models</pre>
+            <h3>Classify Only</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Just classify a task without executing</p>
+            <pre>POST /classify
+{
+  "prompt": "Your prompt here",
+  "task_type": null,
+  "stream": false
+}</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s -X POST http://localhost:9998/classify \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Write code"}'</pre>
         </div>
+        
+        <!-- Get Statistics -->
         <div class="card">
             <h3>Get Statistics</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Usage statistics including avg response time per model</p>
             <pre>GET /stats</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s http://localhost:9998/stats</pre>
         </div>
+        
+        <!-- Get Requests -->
         <div class="card">
-            <h3>Health Check</h3>
-            <pre>GET /health</pre>
+            <h3>Get Request Log</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Get last 50 requests with prompts and response times</p>
+            <pre>GET /requests</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s http://localhost:9998/requests</pre>
+        </div>
+        
+        <!-- Clear Requests -->
+        <div class="card">
+            <h3>Clear Request Log</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Clear the request log</p>
+            <pre>POST /requests/clear</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s -X POST http://localhost:9998/requests/clear</pre>
+        </div>
+        
+        <!-- Get Fallbacks -->
+        <div class="card">
+            <h3>Get Fallback Config</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Get model fallback configuration</p>
+            <pre>GET /config/fallbacks</pre>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
+            <pre style="margin-top:4px;">curl -s http://localhost:9998/config/fallbacks</pre>
+        </div>
+        
+        <!-- Update Fallbacks -->
+        <div class="card">
+            <h3>Update Fallback Config</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Update model fallback configuration</p>
+            <pre>POST /config/fallbacks
+{
+  "fallbacks": {"model": "fallback"},
+  "timeout": 300
+}</pre>
         </div>
     </section>
 
     <section id="debug">
         <h2>Request Log (Last 50)</h2>
         <div class="card">
+            <button class="btn" onclick="clearDebug()" style="margin-bottom:12px;">Clear Log</button>
             <table id="request-log">
-                <thead><tr><th>Time</th><th>Model</th><th>Task Type</th></tr></thead>
+                <thead><tr><th>Time</th><th>Model</th><th>Task Type</th><th>Response Time</th><th>Prompt</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -304,9 +397,19 @@
                 // Update model stats
                 const modelStatsBody = document.querySelector('#model-stats tbody');
                 modelStatsBody.innerHTML = '';
+                const avgTimes = stats.model_avg_times || {};
                 Object.entries(stats.models || {}).sort((a,b) => b[1].count - a[1].count).forEach(([model, data]) => {
                     const pct = stats.total_requests > 0 ? ((data.count / stats.total_requests) * 100).toFixed(1) : 0;
-                    modelStatsBody.innerHTML += `<tr><td>${model}</td><td>${data.count}</td><td>${pct}%</td></tr>`;
+                    const avgTime = avgTimes[model] || 0;
+                    modelStatsBody.innerHTML += `<tr><td>${model}</td><td>${data.count}</td><td>${avgTime}s</td><td>${pct}%</td></tr>`;
+                });
+                
+                // Update metrics (performance by model with attributes)
+                const metricsBody = document.querySelector('#metrics-stats tbody');
+                metricsBody.innerHTML = '';
+                Object.entries(models.models || {}).sort((a,b) => (b[1].speed || 0) - (a[1].speed || 0)).forEach(([model, data]) => {
+                    const avgTime = avgTimes[model] || '-';
+                    metricsBody.innerHTML += `<tr><td>${model}</td><td>${avgTime !== '-' ? avgTime + 's' : '-'}</td><td>${data.speed || '-'}/10</td><td>${data.complexity || '-'}/10</td></tr>`;
                 });
                 
                 // Update category stats
@@ -331,11 +434,21 @@
                 requestLogBody.innerHTML = '';
                 (requests.recent || []).forEach(req => {
                     const time = req.timestamp ? new Date(req.timestamp).toLocaleTimeString() : '-';
-                    requestLogBody.innerHTML += `<tr><td>${time}</td><td>${req.model_used || '-'}</td><td>${req.task_classification || '-'}</td></tr>`;
+                    requestLogBody.innerHTML += `<tr><td>${time}</td><td>${req.model_used || '-'}</td><td>${req.task_classification || '-'}</td><td>${req.execution_time ? req.execution_time + 's' : '-'}</td><td>${req.prompt || '-'}</td></tr>`;
                 });
                 
             } catch (e) {
                 console.error('Error loading data:', e);
+            }
+        }
+        
+        // Clear debug log
+        async function clearDebug() {
+            try {
+                await fetch(API_URL + '/requests/clear', { method: 'POST' });
+                loadData();
+            } catch (e) {
+                console.error('Error clearing debug:', e);
             }
         }
         

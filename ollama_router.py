@@ -17,11 +17,28 @@ from typing import Optional, Dict, List
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from datetime import datetime
 from collections import defaultdict
 import threading
+
+# Model attributes configuration
+# Each model can have:
+# - speed: 1-10 (higher is faster)
+# - complexity: 1-10 (higher can handle more complex tasks)
+# - preferred_for: list of task types it's best at
+MODEL_ATTRIBUTES = {
+    "qwen2.5-coder:7b": {"speed": 8, "complexity": 7, "preferred_for": ["code", "debugging", "technical"]},
+    "deepseek-r1:latest": {"speed": 3, "complexity": 10, "preferred_for": ["reasoning", "analysis", "math"]},
+    "llava:latest": {"speed": 4, "complexity": 6, "preferred_for": ["vision", "image_analysis"]},
+    "nemotron-3-nano:latest": {"speed": 10, "complexity": 4, "preferred_for": ["simple", "fast", "basic"]},
+    "mistral:latest": {"speed": 7, "complexity": 6, "preferred_for": ["general", "conversation"]},
+    "goonsai/qwen2.5-3B-goonsai-nsfw-100k:latest": {"speed": 9, "complexity": 5, "preferred_for": ["image", "generate", "creative"]},
+    "llama2-uncensored:latest": {"speed": 5, "complexity": 7, "preferred_for": ["uncensored", "creative"]},
+    "qwen2.5:7b": {"speed": 8, "complexity": 6, "preferred_for": ["general", "qa", "writing"]},
+}
 
 # Configuration
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")  # Default to docker internal
@@ -68,14 +85,14 @@ class TaskResponse(BaseModel):
 class Statistics:
     def __init__(self):
         self.total_requests = 0
-        self.models = defaultdict(lambda: {"count": 0, "total_time": 0})
+        self.models = defaultdict(lambda: {"count": 0, "total_time": 0.0})
         self.categories = defaultdict(int)
         self.last_update = datetime.now()
         self.lock = threading.Lock()
         self.recent_requests = []  # Last 50 requests for debug
         self.max_recent = 50
     
-    def record_request(self, model: str, category: str, execution_time: float = 0):
+    def record_request(self, model: str, category: str, execution_time: float = 0.0, prompt: str = ""):
         with self.lock:
             self.total_requests += 1
             self.models[model]["count"] += 1
@@ -83,10 +100,12 @@ class Statistics:
             self.categories[category] += 1
             self.last_update = datetime.now()
             
-            # Add to recent requests (no response logged, just model and classification)
+            # Add to recent requests (with prompt logged)
             self.recent_requests.append({
                 "model_used": model,
                 "task_classification": category,
+                "prompt": prompt[:100] + "..." if len(prompt) > 100 else prompt,  # Store truncated prompt
+                "execution_time": round(execution_time, 2),
                 "timestamp": self.last_update.isoformat()
             })
             
@@ -96,9 +115,16 @@ class Statistics:
     
     def to_dict(self):
         with self.lock:
+            # Calculate average response time per model
+            model_avg_times = {}
+            for model, data in self.models.items():
+                if data["count"] > 0:
+                    model_avg_times[model] = round(data["total_time"] / data["count"], 2)
+            
             return {
                 "total_requests": self.total_requests,
                 "models": dict(self.models),
+                "model_avg_times": model_avg_times,
                 "categories": dict(self.categories),
                 "last_update": self.last_update.isoformat()
             }
@@ -106,6 +132,10 @@ class Statistics:
     def get_recent(self):
         with self.lock:
             return list(self.recent_requests)
+    
+    def clear_recent(self):
+        with self.lock:
+            self.recent_requests = []
 
 # Initialize statistics
 stats = Statistics()
@@ -115,6 +145,15 @@ api_app = FastAPI(
     title="Ollama Intelligent Router",
     description="Intelligent task routing proxy for Ollama models",
     version="1.0"
+)
+
+# Add CORS middleware to allow dashboard on different port to access API
+api_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 web_app = FastAPI(
@@ -172,6 +211,7 @@ class OllamaRouter:
         """Categorize models by capability (heuristic)"""
         self.model_categories = {
             "code": [],
+            "image": [],
             "vision": [],
             "reasoning": [],
             "general": [],
@@ -180,9 +220,10 @@ class OllamaRouter:
         
         keywords = {
             "code": ["coder", "code"],
+            "image": ["goonsai", "image", "generate"],
             "vision": ["llava", "vision"],
             "reasoning": ["deepseek", "r1"],
-            "uncensored": ["uncensored", "goonsai", "nsfw"],
+            "uncensored": ["uncensored", "nsfw"],
         }
         
         for model_name in self.available_models.keys():
@@ -203,13 +244,22 @@ class OllamaRouter:
     
     async def classify_task(self, prompt: str) -> str:
         """Use lightweight LLM to classify the task"""
+        
+        # First, check for image-related keywords directly
+        image_keywords = ["image", "picture", "photo", "describe", "analyze", "what is in", 
+                        "visual", "see", "look at", "generate image", "create image"]
+        prompt_lower = prompt.lower()
+        if any(kw in prompt_lower for kw in image_keywords):
+            return "image"
+        
         classification_prompt = f"""Analyze this task and respond with ONLY one category:
 
 Task: "{prompt}"
 
 Categories:
 - code: Writing, debugging, or analyzing code
-- vision: Analyzing, describing, or processing images/visual content
+- image: Generating, describing, or processing images (NOT vision tasks with existing images)
+- vision: Analyzing, describing existing images or visual content
 - reasoning: Explaining, analyzing, problem-solving with step-by-step thinking
 - uncensored: Creative writing, adult content, or unrestricted output
 - general: General conversation, Q&A, writing, summarization
@@ -229,7 +279,7 @@ Respond with ONLY the category name, nothing else."""
             
             if response.status_code == 200:
                 classification = response.json()["response"].strip().lower()
-                valid_categories = ["code", "vision", "reasoning", "uncensored", "general"]
+                valid_categories = ["code", "image", "vision", "reasoning", "uncensored", "general"]
                 if classification in valid_categories:
                     return classification
                 else:
@@ -241,19 +291,82 @@ Respond with ONLY the category name, nothing else."""
             print(f"⚠️ Classification error: {e}")
             return "general"
     
-    def _select_best_model(self, category: str) -> Optional[str]:
-        """Select best model for category"""
+    def _select_best_model(self, category: str, prompt: str = "") -> Optional[str]:
+        """Select best model for category based on prompt complexity"""
+        
+        # Analyze prompt complexity
+        prompt_complexity = self._analyze_prompt_complexity(prompt)
+        
+        # Get models in category
+        category_models = []
         if category in self.model_categories and self.model_categories[category]:
-            return self.model_categories[category][0]
+            category_models = self.model_categories[category]
+        elif self.model_categories["general"]:
+            category_models = self.model_categories["general"]
+        else:
+            # Fallback to any available model
+            for models in self.model_categories.values():
+                if models:
+                    category_models = models
+                    break
         
-        if self.model_categories["general"]:
-            return self.model_categories["general"][0]
+        if not category_models:
+            return None
         
-        for models in self.model_categories.values():
-            if models:
-                return models[0]
+        # Score each model based on attributes and prompt complexity
+        best_model = None
+        best_score = -1
         
-        return None
+        for model in category_models:
+            attrs = MODEL_ATTRIBUTES.get(model, {"speed": 5, "complexity": 5, "preferred_for": []})
+            
+            # Score: prefer model where complexity >= prompt_complexity (can handle it)
+            # and speed is high if prompt is simple
+            complexity_match = 1 if attrs["complexity"] >= prompt_complexity else 0
+            speed_score = attrs["speed"] / 10.0
+            
+            # If model can handle the complexity, prefer faster models for simple prompts
+            if complexity_match:
+                if prompt_complexity <= 3:
+                    score = speed_score * 2 + 1  # Favor speed for simple tasks
+                elif prompt_complexity <= 6:
+                    score = speed_score + complexity_match  # Balanced
+                else:
+                    score = complexity_match * 2 - speed_score  # Favor capability for complex
+            else:
+                score = -1  # Cannot handle
+            
+            if score > best_score:
+                best_score = score
+                best_model = model
+        
+        return best_model
+    
+    def _analyze_prompt_complexity(self, prompt: str) -> int:
+        """Analyze prompt complexity (1-10)"""
+        prompt_lower = prompt.lower()
+        
+        # Simple indicators
+        simple_keywords = ["hello", "hi", "hey", "simple", "quick", "what is", "who is"]
+        medium_keywords = ["explain", "compare", "describe", "write", "create", "make"]
+        complex_keywords = ["analyze", "debug", "optimize", "architecture", "design", "implement", 
+                          "research", "complex", "detailed", "comprehensive", "math", "proof"]
+        
+        simple_count = sum(1 for kw in simple_keywords if kw in prompt_lower)
+        medium_count = sum(1 for kw in medium_keywords if kw in prompt_lower)
+        complex_count = sum(1 for kw in complex_keywords if kw in prompt_lower)
+        
+        # Length factor
+        word_count = len(prompt.split())
+        length_factor = min(word_count / 100, 3)  # Up to 3 points for length
+        
+        # Calculate base complexity
+        base = 3  # Default middle complexity
+        base += medium_count * 1.5
+        base += complex_count * 2.5
+        base += length_factor
+        
+        return min(max(int(base), 1), 10)  # Clamp to 1-10
     
     async def route_and_execute(self, prompt: str, task_type: Optional[str] = None, stream: bool = False) -> Dict:
         """Classify task, select model, and execute with fallback on timeout"""
@@ -265,7 +378,7 @@ Respond with ONLY the category name, nothing else."""
         else:
             classification = await self.classify_task(prompt)
         
-        selected_model = self._select_best_model(classification)
+        selected_model = self._select_best_model(classification, prompt)
         
         if not selected_model:
             raise HTTPException(status_code=503, detail="No models available")
@@ -279,7 +392,7 @@ Respond with ONLY the category name, nothing else."""
         return result
     
     async def _execute_with_fallback(self, prompt: str, model: str, stream: bool, start_time: float, classification: str) -> Dict:
-        """Execute request with fallback to alternative model on timeout"""
+        """Execute request with fallback to alternative model on timeout or error"""
         try:
             response = requests.post(
                 f"{self.base_url}/api/generate",
@@ -296,7 +409,7 @@ Respond with ONLY the category name, nothing else."""
                 execution_time = time.time() - start_time
                 
                 # Record statistics
-                stats.record_request(model, classification, execution_time)
+                stats.record_request(model, classification, execution_time, prompt)
                 
                 return {
                     "result": result,
@@ -305,7 +418,26 @@ Respond with ONLY the category name, nothing else."""
                     "timestamp": datetime.now().isoformat()
                 }
             else:
-                raise HTTPException(status_code=response.status_code, detail="Model execution failed")
+                # Non-200 status - check for error message
+                error_detail = "Model execution failed"
+                try:
+                    error_data = response.json()
+                    if "error" in error_data:
+                        error_detail = error_data["error"]
+                except:
+                    pass
+                
+                # Check if error is due to memory or model loading issues - try fallback
+                memory_keywords = ["memory", "requires more", "not available", "failed to load"]
+                if any(keyword in error_detail.lower() for keyword in memory_keywords):
+                    fallback_model = MODEL_FALLBACKS.get(model)
+                    if fallback_model and fallback_model in self.available_models:
+                        print(f"⚠️ Model {model} failed ({error_detail}), trying fallback: {fallback_model}")
+                        return await self._execute_with_fallback(prompt, fallback_model, stream, start_time, classification)
+                    else:
+                        print(f"❌ Model {model} failed and no fallback available: {error_detail}")
+                
+                raise HTTPException(status_code=response.status_code, detail=error_detail)
         
         except requests.exceptions.Timeout:
             # Timeout occurred - try fallback model
@@ -317,7 +449,17 @@ Respond with ONLY the category name, nothing else."""
                 print(f"❌ Timeout with model {model} and no fallback available")
                 raise HTTPException(status_code=504, detail=f"Model execution timeout. No fallback model configured for {model}")
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            error_msg = str(e)
+            # Check if error is due to memory or model loading issues - try fallback
+            memory_keywords = ["memory", "requires more", "not available", "failed to load"]
+            if any(keyword in error_msg.lower() for keyword in memory_keywords):
+                fallback_model = MODEL_FALLBACKS.get(model)
+                if fallback_model and fallback_model in self.available_models:
+                    print(f"⚠️ Model {model} failed ({error_msg}), trying fallback: {fallback_model}")
+                    return await self._execute_with_fallback(prompt, fallback_model, stream, start_time, classification)
+                else:
+                    print(f"❌ Model {model} failed and no fallback available: {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
 
 # Initialize router
 router = OllamaRouter(OLLAMA_BASE_URL, CLASSIFIER_MODEL)
@@ -352,9 +494,17 @@ async def root():
 @api_app.get("/models")
 async def list_models():
     """List all discovered models"""
+    # Add attributes to each model
+    models_with_attrs = {}
+    for name, info in router.available_models.items():
+        models_with_attrs[name] = {
+            **info,
+            **MODEL_ATTRIBUTES.get(name, {"speed": 5, "complexity": 5, "preferred_for": []})
+        }
+    
     return {
         "total": len(router.available_models),
-        "models": router.available_models,
+        "models": models_with_attrs,
         "categories": router.model_categories
     }
 
@@ -383,7 +533,7 @@ async def process_task(request: TaskRequest):
 async def classify_only(request: TaskRequest):
     """Just classify a task without executing"""
     classification = await router.classify_task(request.prompt)
-    selected_model = router._select_best_model(classification)
+    selected_model = router._select_best_model(classification, request.prompt)
     
     return {
         "prompt": request.prompt,
@@ -437,6 +587,12 @@ async def get_requests():
     return {
         "recent": stats.get_recent()
     }
+
+@api_app.post("/requests/clear")
+async def clear_requests():
+    """Clear the request log"""
+    stats.clear_recent()
+    return {"status": "cleared"}
 
 # ============================================================================
 # WEB DASHBOARD ENDPOINTS (Port 9999)
