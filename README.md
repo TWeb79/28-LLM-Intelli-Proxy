@@ -1,1 +1,364 @@
-"# 28-LLM-Intelli-Proxy" 
+# Ollama Intelligent Router Proxy
+
+An intelligent LLM routing proxy for Ollama with automatic model selection, load balancing, and failover capabilities.
+
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [API Endpoints](#api-endpoints)
+- [Model Attributes](#model-attributes)
+- [Fallback Configuration](#fallback-configuration)
+- [Task Classification](#task-classification)
+- [Web Dashboard](#web-dashboard)
+- [Troubleshooting](#troubleshooting)
+- [Performance Benefits](#performance-benefits)
+
+## Features
+
+### Intelligent Request Routing
+- Automatic task classification based on prompt content
+- Smart model selection based on:
+  - Task category (code, reasoning, general, vision, image, uncensored)
+  - Prompt complexity (1-10)
+  - Model speed and capabilities
+
+### Load Balancing
+- Automatic distribution of requests across multiple Ollama backends
+- Consideration of model attributes (speed, complexity)
+- Optimization for different task types
+
+### Error Handling and Failover
+- Automatic fallback to alternative models on:
+  - Request timeouts
+  - Memory issues
+  - Model loading errors
+- Configurable fallback chains per model
+
+### Statistics and Monitoring
+- Real-time statistics per model:
+  - Request count
+  - Average response time
+  - Task distribution by category
+- Request log with the last 50 requests
+- Web dashboard for monitoring
+
+## Architecture
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────┐
+│   Client    │────▶│  Router Proxy   │────▶│   Ollama    │
+│  (curl/API) │     │   (Port 9998)   │     │ (Port 11434)│
+└─────────────┘     └──────────────────┘     └─────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │  Dashboard   │
+                    │ (Port 9999)  │
+                    └─────────────┘
+```
+
+## Prerequisites
+
+### Software
+- Docker
+- Docker Compose
+
+### Ports
+
+| Port | Service | Description |
+|------|---------|-------------|
+| 9998 | API | Router API endpoints |
+| 9999 | Dashboard | Web dashboard |
+| 9997 | Ollama | Ollama server (direct) |
+
+## Installation
+
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd 28-LLM-Intelli-Proxy
+```
+
+### 2. Start Docker Containers
+
+```bash
+# Build and start containers
+docker-compose up -d --build
+
+# Or start in the background
+docker-compose up -d
+```
+
+### 3. Verify Status
+
+```bash
+# Check container status
+docker ps
+
+# View container logs
+docker logs ollama-router
+```
+
+### 4. Open Dashboard
+
+Open http://localhost:9999 in your browser.
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `OLLAMA_BASE_URL` | http://ollama:11434 | Ollama server URL |
+| `CLASSIFIER_MODEL` | qwen2.5:7b | Model for task classification |
+| `PROXY_PORT` | 9998 | Router API port |
+| `PROXY_HOST` | 0.0.0.0 | Router host binding |
+| `WEB_PORT` | 9999 | Dashboard port |
+| `WEB_HOST` | 0.0.0.0 | Dashboard host binding |
+| `REQUEST_TIMEOUT` | 900 | Timeout in seconds (15 min) |
+| `MODEL_FALLBACKS` | (JSON) | Fallback configuration |
+
+## API Endpoints
+
+### Health Check
+
+```bash
+curl -s http://localhost:9998/health
+```
+
+### Get All Models
+
+```bash
+curl -s http://localhost:9998/models
+```
+
+### Get Models by Category
+
+```bash
+curl -s http://localhost:9998/models/general
+```
+
+### Process Task
+
+```bash
+curl -s -X POST http://localhost:9998/task \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Explain quantum computing","task_type":"reasoning"}'
+```
+
+### Classify Task (Classification Only)
+
+```bash
+curl -s -X POST http://localhost:9998/classify \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Write a function"}'
+```
+
+### Get Statistics
+
+```bash
+curl -s http://localhost:9998/stats
+```
+
+### Get Request Log
+
+```bash
+curl -s http://localhost:9998/requests
+```
+
+### Clear Request Log
+
+```bash
+curl -s -X POST http://localhost:9998/requests/clear
+```
+
+### Get Fallback Configuration
+
+```bash
+curl -s http://localhost:9998/config/fallbacks
+```
+
+### Update Fallback Configuration
+
+```bash
+curl -s -X POST http://localhost:9998/config/fallbacks \
+  -H "Content-Type: application/json" \
+  -d '{"fallbacks":{"deepseek-r1:latest":"qwen2.5:7b"},"timeout":300}'
+```
+
+### API Response Formats
+
+#### POST /task Response
+
+```json
+{
+  "result": "Response text from model",
+  "model_used": "qwen2.5:7b",
+  "task_classification": "general",
+  "timestamp": "2026-02-15T14:12:45.857189"
+}
+```
+
+#### GET /stats Response
+
+```json
+{
+  "total_requests": 10,
+  "models": {
+    "qwen2.5:7b": {
+      "count": 5,
+      "total_time": 75.5
+    },
+    "deepseek-r1:latest": {
+      "count": 5,
+      "total_time": 1200.0
+    }
+  },
+  "model_avg_times": {
+    "qwen2.5:7b": 15.1,
+    "deepseek-r1:latest": 240.0
+  },
+  "categories": {
+    "general": 5,
+    "reasoning": 5
+  },
+  "last_update": "2026-02-15T14:12:45.857189"
+}
+```
+
+#### GET /models Response
+
+```json
+{
+  "total": 8,
+  "categories": {
+    "code": ["qwen2.5-coder:7b"],
+    "reasoning": ["deepseek-r1:latest"],
+    "general": ["qwen2.5:7b", "mistral:latest", "nemotron-3-nano:latest"],
+    "vision": ["llava:latest"],
+    "image": ["goonsai/qwen2.5-3B-goonsai-nsfw-100k:latest"],
+    "uncensored": ["llama2-uncensored:latest"]
+  },
+  "models": {
+    "qwen2.5-coder:7b": {
+      "size": "4.7GB",
+      "speed": 8,
+      "complexity": 7,
+      "preferred_for": ["code", "debugging", "technical"]
+    }
+  }
+}
+```
+
+## Model Attributes
+
+Each model has the following attributes:
+
+| Attribute | Description | Values |
+|-----------|-------------|--------|
+| `speed` | Model speed | 1-10 (10 = fastest) |
+| `complexity` | Complexity handling | 1-10 (10 = most complex) |
+| `preferred_for` | Preferred task types | Array of categories |
+
+### Configured Models
+
+```python
+MODEL_ATTRIBUTES = {
+    "qwen2.5-coder:7b": {"speed": 8, "complexity": 7, "preferred_for": ["code"]},
+    "deepseek-r1:latest": {"speed": 3, "complexity": 10, "preferred_for": ["reasoning"]},
+    "llava:latest": {"speed": 4, "complexity": 6, "preferred_for": ["vision"]},
+    "nemotron-3-nano:latest": {"speed": 10, "complexity": 4, "preferred_for": ["simple"]},
+    "mistral:latest": {"speed": 7, "complexity": 6, "preferred_for": ["general"]},
+    "qwen2.5:7b": {"speed": 8, "complexity": 6, "preferred_for": ["general"]},
+}
+```
+
+## Fallback Configuration
+
+Default fallback chain:
+
+```python
+MODEL_FALLBACKS = {
+    "qwen2.5-coder:7b": "qwen2.5:7b",
+    "deepseek-r1:latest": "qwen2.5:7b",
+    "llava:latest": "qwen2.5:7b",
+    "nemotron-3-nano:latest": "qwen2.5:7b",
+    "mistral:latest": "qwen2.5:7b",
+}
+```
+
+## Task Classification
+
+The router automatically classifies tasks into the following categories:
+
+- **code** - Writing, debugging, and analyzing code
+- **reasoning** - Explaining, analyzing, and problem-solving
+- **general** - Conversation, Q&A, and writing tasks
+- **vision** - Analyzing and describing images
+- **image** - Generating images
+- **uncensored** - Creative writing and unrestricted output
+
+## Web Dashboard
+
+The dashboard at http://localhost:9999 provides:
+
+1. **Status** - Overview of router and available models
+2. **Models** - List of all models with categories
+3. **Statistics** - Usage statistics and average response times
+4. **Config** - Fallback configuration management
+5. **API** - API reference with curl examples
+6. **Debug** - Last 50 requests with prompts and response times
+
+## Troubleshooting
+
+### Container Won't Start
+
+```bash
+# View logs
+docker logs ollama-router
+
+# Rebuild container
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+### Ollama Not Reachable
+
+```bash
+# Check Ollama container
+docker logs ollama-server
+
+# Test Ollama directly
+curl http://localhost:9997/api/tags
+```
+
+### Model Not Responding
+
+- Increase timeout: `REQUEST_TIMEOUT=1800 docker-compose up -d`
+- Fallback model will be used automatically
+
+### Memory Errors
+
+If a model requires more memory than available:
+- Router automatically falls back to fallback model
+- Remove model from MODEL_ATTRIBUTES or reconfigure fallback
+
+## Performance Benefits
+
+1. **Automatic Optimization** - Selects the best model based on task type
+2. **Failover** - No interruption when model errors occur
+3. **Statistics** - Real-time monitoring of model performance
+4. **Easy Integration** - Standard REST API, compatible with existing applications
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
