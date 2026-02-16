@@ -6,6 +6,7 @@ An intelligent LLM routing proxy for Ollama with automatic model selection, load
 
 - [Features](#features)
 - [Architecture](#architecture)
+- [AirLLM Configuration](#airllm-configuration)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Configuration](#configuration)
@@ -59,6 +60,12 @@ An intelligent LLM routing proxy for Ollama with automatic model selection, load
 - Request log with the last 50 requests
 - Web dashboard for monitoring
 
+### AirLLM Integration (Optional)
+- Connect to remote/decentralized Ollama instances via IP:Port
+- Enable AirLLM for large models (70B+) for KV cache compression
+- Per-model AirLLM toggle in dashboard
+- Persistent configuration storage
+
 ## Architecture
 
 ```
@@ -72,6 +79,24 @@ An intelligent LLM routing proxy for Ollama with automatic model selection, load
                     │ (Port 9999)  │
                     └─────────────┘
 ```
+
+### With AirLLM Support (Optional)
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌───────────┐     ┌─────────────┐
+│   Client    │────▶│  Router Proxy   │────▶│  AirLLM   │────▶│   Ollama    │
+│ (Ollama API)│     │   (Port 9998)   │     │(Port 9996)│     │ (Target IP) │
+└─────────────┘     └──────────────────┘     └───────────┘     └─────────────┘
+                            │
+                     ┌──────┴──────┐
+                     │  Dashboard   │
+                     │ (Port 9999)  │
+                     └─────────────┘
+```
+
+**Connection Paths:**
+- **Path A (Direct)**: Client → Proxy → Ollama (for models without AirLLM enabled)
+- **Path B (via AirLLM)**: Client → Proxy → AirLLM → Ollama (for large 70B+ models with KV cache compression)
 
 Clients can now use standard Ollama API - just connect to port 9998 instead of 11434!
 
@@ -88,6 +113,51 @@ Clients can now use standard Ollama API - just connect to port 9998 instead of 1
 | 9998 | API | Router API endpoints |
 | 9999 | Dashboard | Web dashboard |
 | 9997 | Ollama | Ollama server (direct) |
+| 9996 | AirLLM | AirLLM service (optional) |
+
+## AirLLM Configuration
+
+### What is AirLLM?
+AirLLM enables inference with large language models (70B+) using only 4GB of GPU memory through KV cache compression. This allows running very large models on limited hardware.
+
+### Connection Flow
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌───────────┐     ┌─────────────┐
+│   Client    │────▶│  Router Proxy   │────▶│  AirLLM   │────▶│   Ollama    │
+│ (Ollama API)│     │   (Port 9998)   │     │(Port 9996)│     │ (Target IP) │
+└─────────────┘     └──────────────────┘     └───────────┘     └─────────────┘
+```
+
+### Configuration via Dashboard
+
+1. Open the dashboard at http://localhost:9999
+2. Navigate to the "AirLLM" tab
+3. Configure:
+   - **Target Ollama**: Set the IP and port of your Ollama instance (can be remote)
+   - **AirLLM Service**: Enable/disable and set AirLLM host/port
+   - **Per-Model**: Toggle AirLLM for specific models
+
+### Configuration via Environment Variables
+
+```bash
+# Target Ollama (decentralized connection)
+OLLAMA_TARGET_HOST=192.168.1.100
+OLLAMA_TARGET_PORT=11434
+
+# AirLLM Service
+AIRLLM_ENABLED=true
+AIRLLM_HOST=airllm
+AIRLLM_PORT=9996
+```
+
+### Persistent Storage
+
+Configuration is stored in Docker volume `router-data` at `/app/data`:
+- `router_config.json` - Ollama target, AirLLM config, fallbacks
+- `models.json` - Model attributes and settings
+
+These files persist across container restarts.
 
 ## Installation
 
@@ -129,6 +199,11 @@ Open http://localhost:9999 in your browser.
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
 | `OLLAMA_BASE_URL` | http://ollama:11434 | Ollama server URL |
+| `OLLAMA_TARGET_HOST` | ollama | Target Ollama host IP |
+| `OLLAMA_TARGET_PORT` | 11434 | Target Ollama port |
+| `AIRLLM_ENABLED` | false | Enable AirLLM integration |
+| `AIRLLM_HOST` | airllm | AirLLM service host |
+| `AIRLLM_PORT` | 9996 | AirLLM service port |
 | `CLASSIFIER_MODEL` | qwen2.5:7b | Model for task classification |
 | `PROXY_PORT` | 9998 | Router API port |
 | `PROXY_HOST` | 0.0.0.0 | Router host binding |
@@ -138,6 +213,7 @@ Open http://localhost:9999 in your browser.
 | `MODEL_FALLBACKS` | (JSON) | Fallback configuration |
 | `DEFAULT_MODEL` | qwen2.5:7b | Default model when no routing |
 | `ENABLE_AUTO_DISCOVERY` | true | Auto-discover model attributes |
+| `DATA_DIR` | /app/data | Directory for persistent config |
 
 ## API Endpoints
 

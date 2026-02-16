@@ -50,6 +50,198 @@ WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0")
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "900"))  # Default 15 minutes timeout
 ENABLE_AUTO_DISCOVERY = os.getenv("ENABLE_AUTO_DISCOVERY", "true").lower() == "true"
 
+# ============================================================================
+# AirLLM CONFIGURATION - Decentralized Ollama + AirLLM Support
+# ============================================================================
+
+# Target Ollama connection (for decentralized Ollama)
+# This allows connecting to a remote Ollama instance instead of local
+OLLAMA_TARGET = {
+    "host": os.getenv("OLLAMA_TARGET_HOST", "ollama"),
+    "port": int(os.getenv("OLLAMA_TARGET_PORT", "11434")),
+    "base_url": f"http://{os.getenv('OLLAMA_TARGET_HOST', 'ollama')}:{os.getenv('OLLAMA_TARGET_PORT', '11434')}"
+}
+
+# AirLLM Service Configuration
+# AirLLM provides KV cache compression for large models (70B+)
+AIRLLM_CONFIG = {
+    "enabled": os.getenv("AIRLLM_ENABLED", "false").lower() == "true",
+    "host": os.getenv("AIRLLM_HOST", "airllm"),
+    "port": int(os.getenv("AIRLLM_PORT", "9996")),
+    "base_url": f"http://{os.getenv('AIRLLM_HOST', 'airllm')}:{os.getenv('AIRLLM_PORT', '9996')}"
+}
+
+# Model-specific AirLLM configuration
+# Set to True to route requests for this model through AirLLM
+MODEL_AIRLLM_CONFIG = {}
+
+# ============================================================================
+# PERSISTENT CONFIGURATION STORAGE
+# ============================================================================
+
+import os
+from pathlib import Path
+
+# Config directory - use /app/data for Docker, local directory otherwise
+DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
+CONFIG_FILE = DATA_DIR / "router_config.json"
+MODELS_FILE = DATA_DIR / "models.json"
+
+def ensure_data_dir():
+    """Ensure data directory exists"""
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        print(f"⚠️ Could not create data directory: {e}")
+
+def load_router_config() -> dict:
+    """Load router configuration from JSON file"""
+    try:
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                print(f"✅ Loaded router config from {CONFIG_FILE}")
+                return config
+    except json.JSONDecodeError as e:
+        print(f"⚠️ Config file corrupted ({e}), will rebuild from defaults")
+    except Exception as e:
+        print(f"⚠️ Error loading config: {e}")
+    
+    return {}
+
+def save_router_config(config: dict):
+    """Save router configuration to JSON file"""
+    try:
+        ensure_data_dir()
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+        print(f"✅ Saved router config to {CONFIG_FILE}")
+    except Exception as e:
+        print(f"⚠️ Error saving config: {e}")
+
+def load_models_config() -> dict:
+    """Load models configuration from JSON file"""
+    try:
+        if MODELS_FILE.exists():
+            with open(MODELS_FILE, 'r') as f:
+                models_config = json.load(f)
+                print(f"✅ Loaded models config from {MODELS_FILE}")
+                return models_config
+    except json.JSONDecodeError as e:
+        print(f"⚠️ Models file corrupted ({e}), will rebuild from Ollama")
+    except Exception as e:
+        print(f"⚠️ Error loading models: {e}")
+    
+    return {"models": {}, "model_attributes": {}}
+
+def save_models_config(models_config: dict):
+    """Save models configuration to JSON file"""
+    try:
+        ensure_data_dir()
+        with open(MODELS_FILE, 'w') as f:
+            json.dump(models_config, f, indent=2)
+        print(f"✅ Saved models config to {MODELS_FILE}")
+    except Exception as e:
+        print(f"⚠️ Error saving models config: {e}")
+
+def initialize_configs():
+    """Initialize configurations from files or defaults"""
+    global OLLAMA_TARGET, AIRLLM_CONFIG, MODEL_AIRLLM_CONFIG, MODEL_FALLBACKS, MODEL_ATTRIBUTES
+    
+    # Load router config
+    router_config = load_router_config()
+    
+    # Apply saved Ollama target
+    if "ollama_target" in router_config:
+        OLLAMA_TARGET = router_config["ollama_target"]
+    
+    # Apply saved AirLLM config
+    if "airllm_config" in router_config:
+        AIRLLM_CONFIG = router_config["airllm_config"]
+    
+    # Apply saved model AirLLM config
+    if "model_airllm" in router_config:
+        MODEL_AIRLLM_CONFIG = router_config["model_airllm"]
+    
+    # Apply saved fallbacks
+    if "fallbacks" in router_config:
+        MODEL_FALLBACKS.update(router_config["fallbacks"])
+    
+    # Load models config
+    models_config = load_models_config()
+    
+    # Apply saved model attributes
+    if "model_attributes" in models_config:
+        MODEL_ATTRIBUTES.update(models_config["model_attributes"])
+    
+    print(f"📋 Loaded {len(MODEL_ATTRIBUTES)} model attributes")
+
+def update_ollama_target_config(host: str, port: int):
+    """Update and persist Ollama target configuration"""
+    global OLLAMA_TARGET
+    OLLAMA_TARGET["host"] = host
+    OLLAMA_TARGET["port"] = port
+    OLLAMA_TARGET["base_url"] = f"http://{host}:{port}"
+    
+    # Save to config file
+    router_config = load_router_config()
+    router_config["ollama_target"] = OLLAMA_TARGET
+    save_router_config(router_config)
+
+def update_airllm_config(enabled: bool, host: str, port: int):
+    """Update and persist AirLLM service configuration"""
+    global AIRLLM_CONFIG
+    AIRLLM_CONFIG["enabled"] = enabled
+    AIRLLM_CONFIG["host"] = host
+    AIRLLM_CONFIG["port"] = port
+    AIRLLM_CONFIG["base_url"] = f"http://{host}:{port}"
+    
+    # Save to config file
+    router_config = load_router_config()
+    router_config["airllm_config"] = AIRLLM_CONFIG
+    save_router_config(router_config)
+
+def persist_model_airllm_config(model_name: str, enabled: bool):
+    """Update and persist model AirLLM configuration"""
+    global MODEL_AIRLLM_CONFIG
+    MODEL_AIRLLM_CONFIG[model_name] = enabled
+    
+    # Save to config file
+    router_config = load_router_config()
+    router_config["model_airllm"] = MODEL_AIRLLM_CONFIG
+    save_router_config(router_config)
+
+def update_model_attribute(model_name: str, attributes: dict):
+    """Update and persist model attributes"""
+    global MODEL_ATTRIBUTES
+    MODEL_ATTRIBUTES[model_name] = attributes
+    
+    # Save to models config file
+    models_config = load_models_config()
+    models_config["model_attributes"] = MODEL_ATTRIBUTES
+    save_models_config(models_config)
+
+def update_fallback_config(fallbacks: dict):
+    """Update and persist fallback configuration"""
+    global MODEL_FALLBACKS
+    MODEL_FALLBACKS.update(fallbacks)
+    
+    # Save to config file
+    router_config = load_router_config()
+    router_config["fallbacks"] = MODEL_FALLBACKS
+    save_router_config(router_config)
+
+def get_model_endpoint(model_name: str) -> str:
+    """
+    Determine which endpoint to use based on model configuration.
+    If AirLLM is enabled for the model, use AirLLM service.
+    Otherwise, use the configured Ollama target.
+    """
+    if AIRLLM_CONFIG["enabled"] and MODEL_AIRLLM_CONFIG.get(model_name, False):
+        return AIRLLM_CONFIG["base_url"]
+    else:
+        return OLLAMA_TARGET["base_url"]
+
 # Fallback configuration for each model
 MODEL_FALLBACKS = {
     "qwen2.5-coder:7b": "qwen2.5:7b",
@@ -122,6 +314,28 @@ class ModelInfo(BaseModel):
     modified_at: str
     size: int
     description: Optional[str] = None
+
+# AirLLM Configuration Models
+class OllamaTargetConfig(BaseModel):
+    host: str
+    port: int
+
+class AirLLMServiceConfig(BaseModel):
+    enabled: bool
+    host: str
+    port: int
+
+class ModelAirLLMConfig(BaseModel):
+    model_name: str
+    enabled: bool
+
+class AirLLMConfigResponse(BaseModel):
+    ollama_host: str
+    ollama_port: int
+    airllm_enabled: bool
+    airllm_host: str
+    airllm_port: int
+    model_airllm_settings: Dict[str, bool]
 
 # Statistics tracking
 class Statistics:
@@ -234,6 +448,21 @@ class OllamaRouter:
                         "size": size,
                         "modified": model.get("modified_at", ""),
                     }
+                    
+                    # Auto-discover and save attributes for new models
+                    if name not in MODEL_ATTRIBUTES:
+                        print(f"🔍 New model detected: {name}")
+                        if ENABLE_AUTO_DISCOVERY:
+                            try:
+                                attrs = await self.discover_model_attributes(name)
+                                MODEL_ATTRIBUTES[name] = attrs
+                                # Persist the new model attributes
+                                update_model_attribute(name, attrs)
+                            except Exception as e:
+                                print(f"⚠️ Failed to discover attributes for {name}: {e}")
+                                default_attrs = {"speed": 5, "complexity": 5, "preferred_for": ["general"]}
+                                MODEL_ATTRIBUTES[name] = default_attrs
+                                update_model_attribute(name, default_attrs)
                 
                 print(f"✅ Discovered {len(self.available_models)} models from {self.base_url}")
                 self._categorize_models()
@@ -591,7 +820,7 @@ Respond with ONLY the category name, nothing else."""
             raise HTTPException(status_code=500, detail=error_msg)
 
 # Initialize router
-router = OllamaRouter(OLLAMA_BASE_URL, CLASSIFIER_MODEL)
+router = OllamaRouter(OLLAMA_TARGET["base_url"], CLASSIFIER_MODEL)
 
 # ============================================================================
 # API ENDPOINTS (Port 9998)
@@ -603,11 +832,18 @@ async def startup_event():
     print("\n" + "="*70)
     print("🚀 Ollama Intelligent Router Starting...")
     print("="*70)
-    print(f"Connecting to Ollama at: {OLLAMA_BASE_URL}")
+    
+    # Load persistent configurations
+    print("📂 Loading configurations...")
+    initialize_configs()
+    
+    print(f"Connecting to Ollama at: {OLLAMA_TARGET['base_url']}")
     await router.discover_models()
+    
     print(f"\n✅ API running at http://{PROXY_HOST}:{PROXY_PORT}")
     print(f"✅ Dashboard at http://{WEB_HOST}:{WEB_PORT}")
-    print(f"✅ Ollama at {OLLAMA_BASE_URL}")
+    print(f"✅ Ollama at {OLLAMA_TARGET['base_url']}")
+    print(f"✅ AirLLM: {'Enabled' if AIRLLM_CONFIG['enabled'] else 'Disabled'} at {AIRLLM_CONFIG['base_url']}")
     print("="*70 + "\n")
 
 @api_app.get("/")
@@ -617,7 +853,7 @@ async def root():
         "status": "running",
         "available_models": len(router.available_models),
         "classifier_model": CLASSIFIER_MODEL,
-        "ollama_url": OLLAMA_BASE_URL
+        "ollama_url": OLLAMA_TARGET["base_url"]
     }
 
 @api_app.get("/models")
@@ -678,7 +914,7 @@ async def health_check():
         "status": "healthy" if router.available_models else "degraded",
         "models_available": len(router.available_models),
         "categories": {k: len(v) for k, v in router.model_categories.items()},
-        "ollama_url": OLLAMA_BASE_URL,
+        "ollama_url": OLLAMA_TARGET["base_url"],
         "classifier_model": CLASSIFIER_MODEL
     }
 
@@ -698,9 +934,8 @@ async def get_fallbacks():
 @api_app.post("/config/fallbacks")
 async def update_fallbacks(request: dict):
     """Update model fallback configuration"""
-    global MODEL_FALLBACKS
     if "fallbacks" in request:
-        MODEL_FALLBACKS.update(request["fallbacks"])
+        update_fallback_config(request["fallbacks"])
     if "timeout" in request:
         global REQUEST_TIMEOUT
         REQUEST_TIMEOUT = int(request["timeout"])
@@ -708,6 +943,91 @@ async def update_fallbacks(request: dict):
         "status": "updated",
         "fallbacks": MODEL_FALLBACKS,
         "timeout": REQUEST_TIMEOUT
+    }
+
+# ============================================================================
+# AIRLLM CONFIGURATION ENDPOINTS
+# ============================================================================
+
+@api_app.get("/config/airllm")
+async def get_airllm_config():
+    """Get AirLLM and Ollama target configuration"""
+    return {
+        "ollama_host": OLLAMA_TARGET["host"],
+        "ollama_port": OLLAMA_TARGET["port"],
+        "airllm_enabled": AIRLLM_CONFIG["enabled"],
+        "airllm_host": AIRLLM_CONFIG["host"],
+        "airllm_port": AIRLLM_CONFIG["port"],
+        "model_airllm_settings": MODEL_AIRLLM_CONFIG
+    }
+
+@api_app.post("/config/ollama")
+async def update_ollama_target(config: OllamaTargetConfig):
+    """Update the target Ollama IP and port for decentralized connections"""
+    update_ollama_target_config(config.host, config.port)
+    print(f"📍 Ollama target updated to: {OLLAMA_TARGET['base_url']}")
+    return {
+        "status": "updated",
+        "ollama_host": OLLAMA_TARGET["host"],
+        "ollama_port": OLLAMA_TARGET["port"],
+        "base_url": OLLAMA_TARGET["base_url"]
+    }
+
+@api_app.post("/config/airllm/service")
+async def update_airllm_service(config: AirLLMServiceConfig):
+    """Update AirLLM service configuration"""
+    update_airllm_config(config.enabled, config.host, config.port)
+    print(f"🚀 AirLLM service {'enabled' if config.enabled else 'disabled'}: {AIRLLM_CONFIG['base_url']}")
+    return {
+        "status": "updated",
+        "airllm_enabled": AIRLLM_CONFIG["enabled"],
+        "airllm_host": AIRLLM_CONFIG["host"],
+        "airllm_port": AIRLLM_CONFIG["port"],
+        "base_url": AIRLLM_CONFIG["base_url"]
+    }
+
+@api_app.post("/config/model/airllm")
+async def update_model_airllm(config: ModelAirLLMConfig):
+    """Enable or disable AirLLM for a specific model"""
+    persist_model_airllm_config(config.model_name, config.enabled)
+    status = "enabled" if config.enabled else "disabled"
+    print(f"✈️ AirLLM {status} for model: {config.model_name}")
+    return {
+        "status": "updated",
+        "model_name": config.model_name,
+        "airllm_enabled": config.enabled,
+        "model_airllm_settings": MODEL_AIRLLM_CONFIG
+    }
+
+@api_app.post("/models/refresh")
+async def refresh_models():
+    """Force refresh model list from Ollama and save to models.json"""
+    global MODEL_ATTRIBUTES
+    
+    # Discover models from Ollama
+    discovered = await router.discover_models()
+    
+    # Get list of available models
+    available_models = router.available_models
+    
+    # Check for new models not in models.json
+    new_models = []
+    for model_name in available_models.keys():
+        if model_name not in MODEL_ATTRIBUTES:
+            new_models.append(model_name)
+    
+    # Save to models.json
+    models_config = load_models_config()
+    models_config["model_attributes"] = MODEL_ATTRIBUTES
+    save_models_config(models_config)
+    
+    print(f"🔄 Refreshed models from Ollama. Found {len(available_models)} models, {len(new_models)} new")
+    
+    return {
+        "status": "success",
+        "total_models": len(available_models),
+        "new_models": new_models,
+        "all_models": list(available_models.keys())
     }
 
 @api_app.get("/requests")
@@ -722,6 +1042,184 @@ async def clear_requests():
     """Clear the request log"""
     stats.clear_recent()
     return {"status": "cleared"}
+
+# ============================================================================
+# Performance Test Endpoint
+# ============================================================================
+
+import time
+
+def get_model_endpoint_test(model_name: str, use_airllm: bool = False, use_proxy: bool = False) -> str:
+    """
+    Get the endpoint for a performance test.
+    
+    Parameters:
+    - model_name: The model to use
+    - use_airllm: Whether to use AirLLM compression
+    - use_proxy: Whether to route through the IntelliProxy (port 9998)
+    
+    Returns the appropriate endpoint URL.
+    """
+    if use_proxy:
+        # Route through IntelliProxy API (port 9998)
+        return f"http://{PROXY_HOST}:{PROXY_PORT}"
+    elif use_airllm and AIRLLM_CONFIG.get("enabled", False):
+        # Go directly to AirLLM service (not through proxy)
+        return AIRLLM_CONFIG.get("base_url", "http://airllm:9996")
+    else:
+        # Direct to configured Ollama target
+        return OLLAMA_TARGET["base_url"]
+
+async def run_performance_test(prompt: str, mode: str, test_number: int = 1, total_tests: int = 4) -> dict:
+    """
+    Run a performance test for a specific mode.
+    Modes:
+    - "direct": Direct to configured Ollama (ignores AirLLM, goes to configured target)
+    - "direct_airllm": Through proxy with AirLLM enabled (port 9998)
+    - "llm": Use IntelliProxy for routing (port 9998, model=IntelliProxyLLM)
+    - "llm_airllm": IntelliProxy + AirLLM (port 9998)
+    
+    Parameters:
+    - test_number: Current test number (1-based)
+    - total_tests: Total number of tests
+    """
+    start_time = time.time()
+    
+    try:
+        # Determine routing mode
+        if mode == "direct":
+            # Direct to configured Ollama, ignore AirLLM
+            use_airllm = False
+            use_proxy = False
+            model_to_use = DEFAULT_MODEL  # Use default model
+        elif mode == "direct_airllm":
+            # Through proxy with AirLLM enabled
+            use_airllm = True
+            use_proxy = True
+            model_to_use = DEFAULT_MODEL  # Use default model
+        elif mode == "llm":
+            # Use IntelliProxy LLM for routing, no AirLLM
+            use_airllm = False
+            use_proxy = True
+            classification = await router.classify_task(prompt)
+            model_to_use = router._select_best_model(classification, prompt)
+            if not model_to_use:
+                model_to_use = DEFAULT_MODEL
+        elif mode == "llm_airllm":
+            # IntelliProxy with AirLLM enabled
+            use_airllm = True
+            use_proxy = True
+            classification = await router.classify_task(prompt)
+            model_to_use = router._select_best_model(classification, prompt)
+            if not model_to_use:
+                model_to_use = DEFAULT_MODEL
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+        
+        endpoint = get_model_endpoint_test(model_to_use, use_airllm, use_proxy)
+        
+        ollama_request = {
+            "model": model_to_use,
+            "prompt": prompt,
+            "stream": False
+        }
+        
+        response = requests.post(
+            f"{endpoint}/api/generate",
+            json=ollama_request,
+            timeout=120
+        )
+        
+        end_time = time.time()
+        duration = round(end_time - start_time, 2)
+        
+        if response.status_code == 200:
+            result = response.json()
+            return {
+                "mode": mode,
+                "test_number": test_number,
+                "total_tests": total_tests,
+                "model": model_to_use,
+                "endpoint": endpoint,
+                "duration": duration,
+                "tokens": result.get("eval_count", 0),
+                "response": result.get("response", "")[:200] + "..." if len(result.get("response", "")) > 200 else result.get("response", ""),
+                "success": True
+            }
+        else:
+            return {
+                "mode": mode,
+                "test_number": test_number,
+                "total_tests": total_tests,
+                "model": model_to_use,
+                "endpoint": endpoint,
+                "duration": duration,
+                "tokens": 0,
+                "response": f"Error: {response.status_code}",
+                "success": False,
+                "error": response.text[:100]
+            }
+            
+    except Exception as e:
+        end_time = time.time()
+        duration = round(end_time - start_time, 2)
+        return {
+            "mode": mode,
+            "test_number": test_number,
+            "total_tests": total_tests,
+            "model": "N/A",
+            "endpoint": "N/A",
+            "duration": duration,
+            "tokens": 0,
+            "response": f"Error: {str(e)[:100]}",
+            "success": False,
+            "error": str(e)[:100]
+        }
+
+@api_app.post("/performance-test")
+async def run_full_performance_test(request: dict):
+    """
+    Run performance test across all 4 routing paths or a single mode.
+    
+    Request body:
+    - prompt: The prompt to test with
+    - mode: (optional) Specific mode to test: "direct", "direct_airllm", "llm", "llm_airllm"
+    
+    If mode is specified, only that single test is run.
+    """
+    prompt = request.get("prompt", "What is a transparent proxy?")
+    mode = request.get("mode", None)  # Optional: run single mode
+    
+    # If a specific mode is requested, run only that one
+    if mode:
+        modes = [mode]
+    else:
+        modes = [ "llm", "llm_airllm","direct", "direct_airllm"]
+    
+    results = []
+    
+    for i, mode_item in enumerate(modes):
+        try:
+            result = await run_performance_test(prompt, mode_item, i + 1, len(modes))
+            results.append(result)
+        except Exception as e:
+            results.append({
+                "mode": mode_item,
+                "test_number": i + 1,
+                "total_tests": len(modes),
+                "model": "N/A",
+                "endpoint": "N/A",
+                "duration": 0,
+                "tokens": 0,
+                "response": f"Error: {str(e)[:100]}",
+                "success": False,
+                "error": str(e)[:100]
+            })
+    
+    return {
+        "prompt": prompt,
+        "results": results
+    }
 
 # ============================================================================
 # OLLAMA-COMPATIBLE ENDPOINTS (Transparent Proxy)
@@ -814,9 +1312,10 @@ async def generate_with_stream(request: GenerateRequest):
             ollama_request["images"] = request.images
         
         def generate_stream():
+            model_endpoint = get_model_endpoint(model_to_use)
             try:
                 response = requests.post(
-                    f"{OLLAMA_BASE_URL}/api/generate",
+                    f"{model_endpoint}/api/generate",
                     json=ollama_request,
                     stream=True,
                     timeout=REQUEST_TIMEOUT
@@ -850,8 +1349,9 @@ async def generate_with_stream(request: GenerateRequest):
         ollama_request["images"] = request.images
     
     try:
+        model_endpoint = get_model_endpoint(model_to_use)
         response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
+            f"{model_endpoint}/api/generate",
             json=ollama_request,
             timeout=REQUEST_TIMEOUT
         )
@@ -876,8 +1376,9 @@ async def generate_with_stream(request: GenerateRequest):
                     print(f"⚠️ Memory error with {model_to_use}, trying fallback: {fallback}")
                     ollama_request["model"] = fallback
                     try:
+                        fallback_endpoint = get_model_endpoint(fallback)
                         response = requests.post(
-                            f"{OLLAMA_BASE_URL}/api/generate",
+                            f"{fallback_endpoint}/api/generate",
                             json=ollama_request,
                             timeout=REQUEST_TIMEOUT
                         )
@@ -898,8 +1399,9 @@ async def generate_with_stream(request: GenerateRequest):
         fallback = MODEL_FALLBACKS.get(model_to_use)
         if fallback:
             ollama_request["model"] = fallback
+            fallback_endpoint = get_model_endpoint(fallback)
             response = requests.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
+                f"{fallback_endpoint}/api/generate",
                 json=ollama_request,
                 timeout=REQUEST_TIMEOUT
             )
@@ -951,9 +1453,10 @@ async def chat_with_stream(request: ChatRequest):
             ollama_request["system"] = request.system
         
         def chat_stream():
+            model_endpoint = get_model_endpoint(model_to_use)
             try:
                 response = requests.post(
-                    f"{OLLAMA_BASE_URL}/api/chat",
+                    f"{model_endpoint}/api/chat",
                     json=ollama_request,
                     stream=True,
                     timeout=REQUEST_TIMEOUT
@@ -985,8 +1488,9 @@ async def chat_with_stream(request: ChatRequest):
         ollama_request["system"] = request.system
     
     try:
+        model_endpoint = get_model_endpoint(model_to_use)
         response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/chat",
+            f"{model_endpoint}/api/chat",
             json=ollama_request,
             timeout=REQUEST_TIMEOUT
         )
@@ -1012,8 +1516,9 @@ async def chat_with_stream(request: ChatRequest):
                     print(f"⚠️ Memory error with {model_to_use}, trying fallback: {fallback}")
                     ollama_request["model"] = fallback
                     try:
+                        fallback_endpoint = get_model_endpoint(fallback)
                         response = requests.post(
-                            f"{OLLAMA_BASE_URL}/api/chat",
+                            f"{fallback_endpoint}/api/chat",
                             json=ollama_request,
                             timeout=REQUEST_TIMEOUT
                         )
@@ -1035,8 +1540,9 @@ async def chat_with_stream(request: ChatRequest):
         fallback = MODEL_FALLBACKS.get(model_to_use)
         if fallback:
             ollama_request["model"] = fallback
+            fallback_endpoint = get_model_endpoint(fallback)
             response = requests.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
+                f"{fallback_endpoint}/api/chat",
                 json=ollama_request,
                 timeout=REQUEST_TIMEOUT
             )
@@ -1061,7 +1567,7 @@ async def pull_model(request: dict):
     """Forward pull model request to Ollama"""
     try:
         response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/pull",
+            f"{OLLAMA_TARGET['base_url']}/api/pull",
             json=request,
             timeout=REQUEST_TIMEOUT
         )
@@ -1074,7 +1580,7 @@ async def delete_model(request: dict):
     """Forward delete model request to Ollama"""
     try:
         response = requests.delete(
-            f"{OLLAMA_BASE_URL}/api/delete",
+            f"{OLLAMA_TARGET['base_url']}/api/delete",
             json=request,
             timeout=REQUEST_TIMEOUT
         )
@@ -1087,7 +1593,7 @@ async def embeddings(request: dict):
     """Forward embeddings request to Ollama"""
     try:
         response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/embeddings",
+            f"{OLLAMA_TARGET['base_url']}/api/embeddings",
             json=request,
             timeout=REQUEST_TIMEOUT
         )
@@ -1143,7 +1649,7 @@ async def api_health():
         "models_available": len(router.available_models),
         "router_url": f"http://{PROXY_HOST}:{PROXY_PORT}",
         "api_status": "running",
-        "ollama_url": OLLAMA_BASE_URL
+        "ollama_url": OLLAMA_TARGET["base_url"]
     }
 
 # Mount static files

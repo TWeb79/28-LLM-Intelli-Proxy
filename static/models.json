@@ -1,0 +1,223 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "version": "1.0.0",
+    "description": "Model configuration for IntelliProxy Router. This file can be extended automatically when new models are discovered.",
+    "models": {
+        "qwen2.5:7b": {
+            "name": "Qwen 2.5",
+            "size": "4.7 GB",
+            "category": "general",
+            "features": {
+                "general": 4,
+                "code": 3,
+                "vision": 0,
+                "reasoning": 3,
+                "speed": 4,
+                "quality": 4,
+                "censored": 1
+            },
+            "description": "Balanced general-purpose LLM",
+            "backend_attrs": {
+                "speed": 8,
+                "complexity": 6,
+                "preferred_for": ["general", "qa", "writing"]
+            }
+        },
+        "qwen2.5-coder:7b": {
+            "name": "Qwen 2.5 Coder",
+            "size": "4.7 GB",
+            "category": "code",
+            "features": {
+                "general": 3,
+                "code": 4,
+                "vision": 0,
+                "reasoning": 2,
+                "speed": 4,
+                "quality": 3,
+                "censored": 1
+            },
+            "description": "Specialized for code generation and debugging",
+            "backend_attrs": {
+                "speed": 8,
+                "complexity": 7,
+                "preferred_for": ["code", "debugging", "technical"]
+            }
+        },
+        "qwen3-coder:latest": {
+            "name": "Qwen 3 Coder",
+            "size": "18 GB",
+            "category": "code",
+            "features": {
+                "general": 4,
+                "code": 5,
+                "vision": 0,
+                "reasoning": 3,
+                "speed": 2,
+                "quality": 4,
+                "censored": 1
+            },
+            "description": "Advanced code generation and analysis",
+            "backend_attrs": {
+                "speed": 5,
+                "complexity": 9,
+                "preferred_for": ["code", "debugging", "technical", "analysis"]
+            }
+        },
+        "deepseek-r1:latest": {
+            "name": "DeepSeek R1",
+            "size": "5.2 GB",
+            "category": "reasoning",
+            "features": {
+                "general": 4,
+                "code": 4,
+                "vision": 0,
+                "reasoning": 5,
+                "speed": 2,
+                "quality": 4,
+                "censored": 1
+            },
+            "description": "Advanced reasoning and step-by-step analysis",
+            "backend_attrs": {
+                "speed": 3,
+                "complexity": 10,
+                "preferred_for": ["reasoning", "analysis", "math"]
+            }
+        },
+        "llama2-uncensored:latest": {
+            "name": "Llama 2 Uncensored",
+            "size": "3.8 GB",
+            "category": "uncensored",
+            "features": {
+                "general": 3,
+                "code": 3,
+                "vision": 0,
+                "reasoning": 2,
+                "speed": 4,
+                "quality": 3,
+                "censored": 0
+            },
+            "description": "Unrestricted content generation",
+            "backend_attrs": {
+                "speed": 5,
+                "complexity": 7,
+                "preferred_for": ["uncensored", "creative"]
+            }
+        },
+        "nemotron-3-nano:latest": {
+            "name": "Nemotron 3 Nano",
+            "size": "24 GB",
+            "category": "general",
+            "features": {
+                "general": 5,
+                "code": 4,
+                "vision": 0,
+                "reasoning": 4,
+                "speed": 2,
+                "quality": 5,
+                "censored": 1
+            },
+            "description": "Highest quality general-purpose LLM",
+            "backend_attrs": {
+                "speed": 10,
+                "complexity": 4,
+                "preferred_for": ["simple", "fast", "basic"]
+            }
+        },
+        "llava:7b": {
+            "name": "LLaVA 7B",
+            "size": "4.7 GB",
+            "category": "vision",
+            "features": {
+                "general": 3,
+                "code": 3,
+                "vision": 3,
+                "reasoning": 2,
+                "speed": 4,
+                "quality": 3,
+                "censored": 1
+            },
+            "description": "Vision and language understanding",
+            "backend_attrs": {
+                "speed": 4,
+                "complexity": 6,
+                "preferred_for": ["vision", "image_analysis"]
+            }
+        },
+        "goonsai/qwen2.5-3B-goonsai-nsfw-100k:latest": {
+            "name": "Qwen 2.5 NSFW",
+            "size": "6.2 GB",
+            "category": "uncensored",
+            "features": {
+                "general": 3,
+                "code": 2,
+                "vision": 0,
+                "reasoning": 2,
+                "speed": 4,
+                "quality": 2,
+                "censored": 0
+            },
+            "description": "NSFW/Adult content generation",
+            "backend_attrs": {
+                "speed": 9,
+                "complexity": 5,
+                "preferred_for": ["uncensored", "creative"]
+            }
+        },
+        "minimax-m2.1:cloud": {
+            "name": "Minimax M2.1",
+            "size": "Cloud",
+            "category": "general",
+            "features": {
+                "general": 5,
+                "code": 4,
+                "vision": 0,
+                "reasoning": 5,
+                "speed": 2,
+                "quality": 5,
+                "censored": 1
+            },
+            "description": "Premium cloud-based model",
+            "backend_attrs": {
+                "speed": 10,
+                "complexity": 10,
+                "preferred_for": ["general", "reasoning", "analysis", "premium"]
+            }
+        }
+    },
+    "feature_labels": {
+        "general": "🧠 General",
+        "code": "💻 Code",
+        "vision": "👁️ Vision",
+        "reasoning": "🔍 Reasoning",
+        "speed": "⚡ Speed",
+        "quality": "✨ Quality",
+        "censored": "🔒 Censored"
+    },
+    "category_colors": {
+        "code": "#10b981",
+        "vision": "#8b5cf6",
+        "reasoning": "#f59e0b",
+        "general": "#3b82f6",
+        "uncensored": "#ef4444"
+    },
+    "default_model": {
+        "name": "Unknown Model",
+        "size": "Unknown",
+        "category": "general",
+        "features": {
+            "general": 3,
+            "code": 3,
+            "vision": 0,
+            "reasoning": 3,
+            "speed": 3,
+            "quality": 3,
+            "censored": 1
+        },
+        "description": "Auto-discovered model - please update configuration",
+        "backend_attrs": {
+            "speed": 5,
+            "complexity": 5,
+            "preferred_for": ["general"]
+        }
+    }
+}

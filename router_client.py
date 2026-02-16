@@ -3,12 +3,28 @@
 Ollama Compatible Client for IntelliProxy
 Standard Ollama client implementation with IntelliProxy as the default model.
 Connects to proxy on port 9998 instead of standard Ollama port.
+
+Routing Modes:
+1. DIRECT - Connect directly to Ollama (bypass IntelliProxy)
+2. PROXY - Use IntelliProxy intelligent routing (default)
+3. AIRLLM - Use AirLLM compression with Ollama
+4. AIRLLM_PROXY - Use AirLLM + IntelliProxy routing
 """
 
 import requests
 import json
 from typing import Optional, Dict, List, Iterator, Union, overload, Literal
 from datetime import datetime
+from enum import Enum
+
+
+class RoutingMode(Enum):
+    """Routing mode for the client"""
+    DIRECT = "direct"           # Direct to Ollama
+    PROXY = "proxy"             # Via IntelliProxy
+    AIRLLM = "airllm"           # AirLLM compression
+    AIRLLM_PROXY = "airllm_proxy"  # AirLLM + Proxy
+
 
 class OllamaClient:
     """
@@ -16,17 +32,43 @@ class OllamaClient:
     Works exactly like standard Ollama client, but uses IntelliProxyLLM by default.
     """
     
-    def __init__(self, proxy_url: str = "http://localhost:9998", timeout: int = 600):
+    # Default endpoints
+    OLLAMA_DIRECT = "http://localhost:9997"  # Direct Ollama (docker port 9997)
+    PROXY_URL = "http://localhost:9998"       # IntelliProxy API
+    AIRLLM_URL = "http://localhost:9996"       # AirLLM
+    
+    def __init__(
+        self,
+        proxy_url: str = PROXY_URL,
+        routing_mode: RoutingMode = RoutingMode.PROXY,
+        timeout: int = 600
+    ):
         """
         Initialize the Ollama client.
         
         Args:
             proxy_url: URL of the IntelliProxy (default: http://localhost:9998)
+            routing_mode: How to route requests (direct, proxy, airllm, airllm_proxy)
             timeout: Request timeout in seconds (default: 600)
         """
-        self.proxy_url = proxy_url.rstrip("/")
+        self.proxy_url = (proxy_url or self.PROXY_URL).rstrip("/")
+        self.routing_mode = routing_mode
         self.session = requests.Session()
         self.timeout = timeout
+    
+    def _get_endpoint(self) -> str:
+        """Get the appropriate endpoint based on routing mode"""
+        if self.routing_mode == RoutingMode.DIRECT:
+            return self.OLLAMA_DIRECT
+        elif self.routing_mode in (RoutingMode.AIRLLM, RoutingMode.AIRLLM_PROXY):
+            return self.AIRLLM_URL
+        else:
+            return self.proxy_url
+    
+    def set_routing_mode(self, mode: RoutingMode):
+        """Change the routing mode at runtime"""
+        self.routing_mode = mode
+        print(f"Routing mode set to: {mode.value}")
     
     # =========================================================================
     # Standard Ollama API Methods
@@ -37,9 +79,12 @@ class OllamaClient:
         List all available models (including IntelliProxyLLM).
         Equivalent to: curl http://localhost:9998/api/tags
         
+        Note: This always connects to the proxy to get the full model list.
+        
         Returns:
             Dict with 'models' key containing list of models
         """
+        # Always use proxy for model listing (to get IntelliProxyLLM)
         response = self.session.get(
             f"{self.proxy_url}/api/tags",
             timeout=30
@@ -72,7 +117,7 @@ class OllamaClient:
     def generate(
         self,
         prompt: str,
-        model: str = "IntelliProxyLLM",
+        model: Optional[str] = None,
         stream: bool = False,
         **options
     ) -> Union[Dict, Iterator[str]]:
@@ -82,13 +127,19 @@ class OllamaClient:
         
         Args:
             prompt: The prompt to generate completion for
-            model: Model to use (default: IntelliProxyLLM for intelligent routing)
+            model: Model to use (default: IntelliProxyLLM for intelligent routing, or qwen2.5:7b for direct mode)
             stream: Whether to stream the response
             **options: Additional Ollama options (temperature, top_p, etc.)
         
         Returns:
             Dict response if stream=False, Iterator if stream=True
         """
+        # Set default model based on routing mode
+        if model is None:
+            if self.routing_mode == RoutingMode.DIRECT:
+                model = "qwen2.5:7b"  # Default model for direct Ollama
+            else:
+                model = "IntelliProxyLLM"  # Use intelligent routing
         payload = {
             "model": model,
             "prompt": prompt,
@@ -96,11 +147,14 @@ class OllamaClient:
             **options
         }
         
+        # Use the appropriate endpoint based on routing mode
+        endpoint = self._get_endpoint()
+        
         if stream:
-            return self._stream_request("/api/generate", payload)
+            return self._stream_request("/api/generate", payload, base_url=endpoint)
         
         response = self.session.post(
-            f"{self.proxy_url}/api/generate",
+            f"{endpoint}/api/generate",
             json=payload,
             timeout=self.timeout
         )
@@ -134,11 +188,14 @@ class OllamaClient:
             **options
         }
         
+        # Use the appropriate endpoint based on routing mode
+        endpoint = self._get_endpoint()
+        
         if stream:
-            return self._stream_request("/api/chat", payload)
+            return self._stream_request("/api/chat", payload, base_url=endpoint)
         
         response = self.session.post(
-            f"{self.proxy_url}/api/chat",
+            f"{endpoint}/api/chat",
             json=payload,
             timeout=self.timeout
         )
@@ -168,10 +225,11 @@ class OllamaClient:
     # Helper Methods
     # =========================================================================
     
-    def _stream_request(self, endpoint: str, payload: Dict) -> Iterator[str]:
+    def _stream_request(self, endpoint: str, payload: Dict, base_url: Optional[str] = None) -> Iterator[str]:
         """Handle streaming requests."""
+        url = (base_url or self.proxy_url) + endpoint
         response = self.session.post(
-            f"{self.proxy_url}{endpoint}",
+            url,
             json=payload,
             stream=True,
             timeout=self.timeout
@@ -184,7 +242,7 @@ class OllamaClient:
                 if decoded == "data: [DONE]":
                     break
                 if decoded.startswith("data: "):
-                    yield decoded[6:]  # Remove "data: " prefix
+                    yield decoded[6:]
     
     def pull(self, model: str, stream: bool = False) -> Union[Dict, Iterator[str]]:
         """Pull a model from Ollama."""
@@ -215,17 +273,24 @@ class OllamaClient:
     # Convenience Methods
     # =========================================================================
     
-    def ask(self, prompt: str, model: str = "IntelliProxyLLM") -> str:
+    def ask(self, prompt: str, model: Optional[str] = None) -> str:
         """
         Simple Q&A interface - returns just the text response.
         
         Args:
             prompt: Question to ask
-            model: Model to use
+            model: Model to use (auto-selected based on routing mode if not provided)
         
         Returns:
             Generated text response
         """
+        # Use the routing mode's default model if not specified
+        if model is None:
+            if self.routing_mode == RoutingMode.DIRECT:
+                model = "qwen2.5:7b"
+            else:
+                model = "IntelliProxyLLM"
+        
         result = self.generate(prompt, model=model, stream=False)  # type: ignore
         return result.get("response", "")
     
@@ -328,9 +393,19 @@ def example_usage():
     print("\n")
 
 
-def quick_ask(prompt: str):
-    """Quick CLI usage: python router_client.py "Your question" """
-    client = OllamaClient()
+def quick_ask(prompt: str, mode: RoutingMode = RoutingMode.PROXY):
+    """
+    Quick CLI usage: 
+        python router_client.py "Your question"            # Via proxy (default)
+        python router_client.py direct "Your question"     # Direct to Ollama
+        python router_client.py airllm "Your question"    # Via AirLLM
+    
+    Args:
+        prompt: The question to ask
+        mode: Routing mode to use
+    """
+    client = OllamaClient(routing_mode=mode)
+    print(f"\n[{mode.value.upper()}] Asking: {prompt[:50]}...")
     response = client.ask(prompt)
     print(response)
 
@@ -339,9 +414,19 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) > 1:
-        # Quick mode: python router_client.py "Your prompt here"
-        prompt = " ".join(sys.argv[1:])
-        quick_ask(prompt)
+        # Check for routing mode flag
+        if sys.argv[1] in [m.value for m in RoutingMode]:
+            mode = RoutingMode(sys.argv[1])
+            prompt = " ".join(sys.argv[2:])
+        else:
+            mode = RoutingMode.PROXY
+            prompt = " ".join(sys.argv[1:])
+        
+        if not prompt:
+            print("Usage: python router_client.py [direct|proxy|airllm|airllm_proxy] \"Your question\"")
+            sys.exit(1)
+            
+        quick_ask(prompt, mode)
     else:
         # Demo mode
         example_usage()

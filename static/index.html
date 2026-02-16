@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama IntelliProxy by T.Weber</title>
+    <title>LLM IntelliProxy by Torsten Weber</title>
     
     <!-- Custom Meta-Tags für den Monitor -->
-    <meta name="application-name" content="Ollama Intelli Proxy">
+    <meta name="application-name" content="LLM IntelliProxy">
     <meta name="application-description" content="Intelligent routing proxy for Ollama LLMs with performance-based model selection and fallback configuration.">
     <meta name="application-category" content="AI/ML">   
+    <meta name="application-author" content="Torsten Weber">   
      <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
@@ -151,12 +152,13 @@
 </head>
 <body>
     <header>
-        <h1>Ollama Router</h1>
+        <h1>IntelliProxy</h1>
         <nav>
             <a href="#status">Status</a>
             <a href="#models">Models</a>
             <a href="#stats">Statistics</a>
             <a href="#config">Config</a>
+            <a href="#airllm-config">AirLLM</a>
             <a href="#api">API</a>
             <a href="#debug">Debug</a>
         </nav>
@@ -172,43 +174,64 @@
             <div class="card">
                 <div class="stat" id="models-count">-</div>
                 <div class="stat-label">Models Available</div>
+                <div style="margin-top:8px;"><button class="btn" onclick="refreshModels()" id="refresh-models-btn">🔄 Reload from Ollama</button>
+            </div>
             </div>
             <div class="card">
-                <div class="stat" id="router-status" style="color:#10b981;">●</div>
-                <div class="stat-label">Router Status</div>
+                <div style="font-size:12px;margin-bottom:4px;"><strong>                    <span id="ollama-status-top" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ccc;margin-left:2px;vertical-align:middle;"></span>
+                Ollama:</strong> <code id="ollama-url-top">Loading...</code> 
+                </div>
+                <div style="font-size:12px;"><strong>                    <span id="router-status-top" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ccc;margin-left:2px;vertical-align:middle;"></span> 
+                IntelliProxy:</strong> <code id="router-url-top">Loading...</code> 
+                </div>
             </div>
         </div>
     </section>
 
     <section id="models">
         <h2>Available Models</h2>
-        <div class="card" style="margin-bottom:16px;">
-            <p><strong>Ollama API:</strong> <code id="ollama-url">http://HOST_IP:11434</code></p>
-            <p><strong>Router API:</strong> <code id="router-url">http://HOST_IP:9998</code></p>
-        </div>
         <div id="models-list" class="grid"></div>
     </section>
 
     <section id="stats">
         <h2>Statistics</h2>
         <div class="card">
-            <h3>Usage by Model</h3>
+            <h3>Model Overview</h3>
             <table id="model-stats">
-                <thead><tr><th>Model</th><th>Requests</th><th>Avg Time (s)</th><th>%</th></tr></thead>
+                <thead><tr><th>Model</th><th>Category</th><th>Requests</th><th>Avg Time</th><th>%</th><th>Speed</th><th>Complexity</th><th>Preferred For</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
+    </section>
+
+    <section id="performance">
+        <h2>Performance Test</h2>
+        <div class="card" style="margin-bottom:16px;">
+            <p style="font-size:12px;color:#666;margin-bottom:12px;">Test all 4 routing paths and compare performance</p>
+            <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+                <div style="flex:1;min-width:300px;">
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Test Prompt</label>
+                    <input type="text" id="perf-test-prompt" value="What is a transparent proxy?" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;">
+                </div>
+                <button class="btn" onclick="runPerformanceTest()" id="perf-test-btn">▶ Run Performance Test</button>
+            </div>
+            <p id="perf-test-status" style="font-size:12px;margin-top:8px;"></p>
+        </div>
         <div class="card">
-            <h3>Categories</h3>
-            <table id="category-stats">
-                <thead><tr><th>Category</th><th>Requests</th><th>%</th></tr></thead>
+            <h3>Results</h3>
+            <table id="perf-test-results">
+                <thead><tr><th>Mode</th><th>Model</th><th>Duration</th><th>Tokens</th><th>Response</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
+    </section>
+
+    <section id="debug">
+        <h2>Request Log (Last 50)</h2>
         <div class="card">
-            <h3>Performance Metrics</h3>
-            <table id="metrics-stats">
-                <thead><tr><th>Model</th><th>Avg Response Time</th><th>Speed</th><th>Complexity</th></tr></thead>
+            <button class="btn" onclick="clearDebug()" style="margin-bottom:12px;">Clear Log</button>
+            <table id="request-log">
+                <thead><tr><th>Time</th><th>Model</th><th>Task Type</th><th>Response Time</th><th>Prompt</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -216,9 +239,151 @@
 
     <section id="config">
         <h2>Fallback Configuration</h2>
+        
+        <!-- Add Fallback Form -->
+        <div class="card" style="margin-bottom:16px;">
+            <h3>➕ Add Fallback</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:12px;">Configure a fallback model that will be used when the primary model fails</p>
+            <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Primary Model</label>
+                    <select id="fallback-model-select" style="width:250px;">
+                        <option value="">Select Model</option>
+                    </select>
+                </div>
+                <div style="font-size:14px;color:#666;">→</div>
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Fallback Model</label>
+                    <select id="fallback-target-select" style="width:250px;">
+                        <option value="">Select Fallback</option>
+                    </select>
+                </div>
+                <button class="btn" onclick="addFallback()">Add</button>
+            </div>
+            <p id="fallback-status" style="font-size:12px;margin-top:8px;"></p>
+        </div>
+        
+        <!-- Timeout Configuration -->
+        <div class="card" style="margin-bottom:16px;">
+            <h3>⏱️ Timeout Configuration</h3>
+            <div style="display:flex;gap:12px;align-items:end;">
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Timeout (seconds)</label>
+                    <input type="number" id="timeout-input" value="300" min="60" style="width:120px;" />
+                </div>
+                <button class="btn" onclick="updateTimeout()">Update</button>
+            </div>
+            <p style="font-size:11px;color:#999;margin-top:8px;">Current: <span id="timeout-value">300</span>s</p>
+        </div>
+        
+        <!-- Current Fallbacks -->
         <div class="card">
-            <p style="margin-bottom:12px;">Timeout: <span id="timeout-value">300</span>s</p>
+            <h3>📋 Current Fallbacks</h3>
             <div id="fallback-list"></div>
+        </div>
+    </section>
+
+    <section id="airllm-config">
+        <h2>AirLLM & Ollama Configuration</h2>
+        
+        <!-- Connection Visualization -->
+        <div class="card" style="margin-bottom:16px;background:#f8f9fa;">
+            <h3>🔌 Connection Flow</h3>
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:20px 0;flex-wrap:wrap;">
+                <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #ddd;text-align:center;">
+                    <div style="font-size:24px;">⚡</div>
+                    <div style="font-weight:500;font-size:12px;">LLM IntelliProxy</div>
+                    <div style="font-size:10px;color:#666;">Port 9998</div>
+                </div>
+                <div style="font-size:20px;color:#666;">→</div>
+                <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #ddd;text-align:center;">
+                    <div style="font-size:24px;">💻</div>
+                    <div style="font-weight:500;font-size:12px;">LLM IntelliProxy Config</div>
+                    <div style="font-size:10px;color:#666;">Port 9999</div>
+                </div>
+                <div style="font-size:20px;color:#666;">→</div>
+                <div style="background:#e3f2fd;padding:12px 16px;border-radius:8px;border:1px solid #2196f3;text-align:center;">
+                    <div style="font-size:24px;">✈️</div>
+                    <div style="font-weight:500;font-size:12px;">AirLLM</div>
+                    <div style="font-size:10px;color:#666;">Port 9996</div>
+                </div>
+                <div style="font-size:20px;color:#666;">→</div>
+                <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #4caf50;text-align:center;">
+                    <div style="font-size:24px;">🦙</div>
+                    <div style="font-weight:500;font-size:12px;">Ollama</div>
+                    <div style="font-size:10px;color:#666;">Port 9997</div>
+                </div>
+            </div>
+            
+            <!-- Path explanation -->
+            <div style="margin-top:16px;padding:12px;background:#fff;border-radius:6px;">
+                <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">
+                    <div style="flex:1;min-width:200px;">
+                        <strong>Path A (Direct):</strong><br/>
+                        <span style="color:#4caf50;">Client → Proxy → Ollama</span><br/>
+                        <span style="color:#999;">For models without AirLLM</span>
+                    </div>
+                    <div style="flex:1;min-width:200px;">
+                        <strong>Path B (via AirLLM):</strong><br/>
+                        <span style="color:#2196f3;">Client → Proxy → AirLLM → Ollama</span><br/>
+                        <span style="color:#999;">For large models (70B+) with compression</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Ollama Target Configuration -->
+        <div class="card" style="margin-bottom:16px;">
+            <h3>🎯 Target Ollama Connection</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:12px;">Configure the target Ollama IP and port for decentralized connections</p>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Host IP</label>
+                    <input type="text" id="ollama-target-host" placeholder="127.0.0.1" style="width:200px;" />
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Port</label>
+                    <input type="number" id="ollama-target-port" placeholder="9997" style="width:100px;" />
+                </div>
+                <div style="margin-top:18px;">
+                    <button class="btn" onclick="saveOllamaTarget()">Save Target</button>
+                </div>
+            </div>
+            <p id="ollama-target-status" style="font-size:11px;margin-top:8px;color:#10b981;"></p>
+        </div>
+        
+        <!-- AirLLM Service Configuration -->
+        <div class="card" style="margin-bottom:16px;">
+            <h3>✈️ AirLLM Service</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:12px;">AirLLM provides KV cache compression for large models (70B+). Enable the service and configure per-model routing.</p>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Enable AirLLM</label>
+                    <select id="airllm-enabled" style="width:120px;" onchange="toggleAirLLMService()">
+                        <option value="false">Disabled</option>
+                        <option value="true">Enabled</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">AirLLM Host</label>
+                    <input type="text" id="airllm-host" placeholder="127.0.0.1" style="width:150px;" />
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">AirLLM Port</label>
+                    <input type="number" id="airllm-port" placeholder="9996" style="width:100px;" />
+                </div>
+                <div style="margin-top:18px;">
+                    <button class="btn" onclick="saveAirLLMConfig()">Save AirLLM</button>
+                </div>
+            </div>
+            <p id="airllm-status" style="font-size:11px;margin-top:8px;color:#10b981;"></p>
+        </div>
+        
+        <!-- Model-specific AirLLM Configuration -->
+        <div class="card">
+            <h3>📦 AirLLM per Model</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:12px;">Enable AirLLM acceleration for specific models. Requests to these models will be routed through AirLLM.</p>
+            <div id="model-airllm-list" class="grid"></div>
         </div>
     </section>
 
@@ -335,23 +500,12 @@
         </div>
     </section>
 
-    <section id="debug">
-        <h2>Request Log (Last 50)</h2>
-        <div class="card">
-            <button class="btn" onclick="clearDebug()" style="margin-bottom:12px;">Clear Log</button>
-            <table id="request-log">
-                <thead><tr><th>Time</th><th>Model</th><th>Task Type</th><th>Response Time</th><th>Prompt</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </section>
-
     <footer>
-        Ollama Router &middot; Intelligent LLM Dispatcher
+        IntelliProxy &middot; Intelligent LLM Dispatcher
     </footer>
 
     <script>
-        // Router runs on port 9998, Dashboard on 9999
+        // IntelliProxy runs on port 9998, Dashboard on 9999
         const ROUTER_PORT = 9998;
         const STATIC_PORT = 9999;
         const HOST_IP = window.location.hostname;
@@ -363,29 +517,246 @@
             const ollamaUrl = document.getElementById('ollama-url');
             const routerUrl = document.getElementById('router-url');
             const apiBaseUrl = document.getElementById('api-base-url');
-            if (ollamaUrl) ollamaUrl.textContent = `http://${HOST_IP}:${OLLAMA_PORT}`;
-            if (routerUrl) routerUrl.textContent = `http://${HOST_IP}:${ROUTER_PORT}`;
-            if (apiBaseUrl) apiBaseUrl.textContent = `http://${HOST_IP}:${ROUTER_PORT}`;
+            const ollamaStatus = document.getElementById('ollama-status');
+            const routerStatus = document.getElementById('router-status');
+            const ollamaUrlTop = document.getElementById('ollama-url-top');
+            const routerUrlTop = document.getElementById('router-url-top');
+            const ollamaStatusTop = document.getElementById('ollama-status-top');
+            const routerStatusTop = document.getElementById('router-status-top');
+            
+            // Fetch health to get current config
+            fetch(API_URL + '/api/health')
+                .then(res => res.json())
+                .then(data => {
+                    if (ollamaUrl) {
+                        ollamaUrl.textContent = data.ollama_url || `http://${HOST_IP}:${OLLAMA_PORT}`;
+                    }
+                    if (routerUrl) {
+                        routerUrl.textContent = data.router_url || `http://${HOST_IP}:${ROUTER_PORT}`;
+                    }
+                    if (apiBaseUrl) {
+                        apiBaseUrl.textContent = data.router_url || `http://${HOST_IP}:${ROUTER_PORT}`;
+                    }
+                    // Update top section URLs
+                    if (ollamaUrlTop) {
+                        ollamaUrlTop.textContent = data.ollama_url || `http://${HOST_IP}:${OLLAMA_PORT}`;
+                    }
+                    if (routerUrlTop) {
+                        routerUrlTop.textContent = data.router_url || `http://${HOST_IP}:${ROUTER_PORT}`;
+                    }
+                    // Update status lights
+                    if (ollamaStatus) {
+                        ollamaStatus.style.background = data.status === 'healthy' ? '#22c55e' : '#ef4444';
+                    }
+                    if (routerStatus) {
+                        routerStatus.style.background = data.api_status === 'running' ? '#22c55e' : '#ef4444';
+                    }
+                    // Update top status lights
+                    if (ollamaStatusTop) {
+                        ollamaStatusTop.style.background = data.status === 'healthy' ? '#22c55e' : '#ef4444';
+                    }
+                    if (routerStatusTop) {
+                        routerStatusTop.style.background = data.api_status === 'running' ? '#22c55e' : '#ef4444';
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching health:', err);
+                    if (ollamaUrl) ollamaUrl.textContent = `http://${HOST_IP}:${OLLAMA_PORT}`;
+                    if (routerUrl) routerUrl.textContent = `http://${HOST_IP}:${ROUTER_PORT}`;
+                    if (ollamaStatus) ollamaStatus.style.background = '#ef4444';
+                    if (routerStatus) routerStatus.style.background = '#ef4444';
+                    if (ollamaUrlTop) ollamaUrlTop.textContent = `http://${HOST_IP}:${OLLAMA_PORT}`;
+                    if (routerUrlTop) routerUrlTop.textContent = `http://${HOST_IP}:${ROUTER_PORT}`;
+                    if (ollamaStatusTop) ollamaStatusTop.style.background = '#ef4444';
+                    if (routerStatusTop) routerStatusTop.style.background = '#ef4444';
+                });
+            
+            // Populate model dropdowns for fallback configuration
+            populateModelSelects();
         });
+        
+        // Refresh health status (for header IPs and traffic lights)
+        async function refreshHealthStatus() {
+            try {
+                const response = await fetch(API_URL + '/api/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Update header Ollama URL display
+                    const ollamaUrlTop = document.getElementById('ollama-url-top');
+                    if (ollamaUrlTop) {
+                        ollamaUrlTop.textContent = data.ollama_url || 'Not configured';
+                    }
+                    
+                    // Update main Ollama URL display
+                    const ollamaUrl = document.getElementById('ollama-url');
+                    if (ollamaUrl) {
+                        ollamaUrl.textContent = data.ollama_url || 'Not configured';
+                    }
+                    
+                    // Update router URL displays
+                    const routerUrlTop = document.getElementById('router-url-top');
+                    if (routerUrlTop) {
+                        routerUrlTop.textContent = data.router_url || `http://${HOST_IP}:${ROUTER_PORT}`;
+                    }
+                    
+                    const routerUrl = document.getElementById('router-url');
+                    if (routerUrl) {
+                        routerUrl.textContent = data.router_url || `http://${HOST_IP}:${ROUTER_PORT}`;
+                    }
+                    
+                    // Update status lights
+                    const ollamaStatusTop = document.getElementById('ollama-status-top');
+                    if (ollamaStatusTop) {
+                        ollamaStatusTop.style.background = data.status === 'healthy' ? '#22c55e' : '#ef4444';
+                    }
+                    
+                    const ollamaStatus = document.getElementById('ollama-status');
+                    if (ollamaStatus) {
+                        ollamaStatus.style.background = data.status === 'healthy' ? '#22c55e' : '#ef4444';
+                    }
+                    
+                    const routerStatusTop = document.getElementById('router-status-top');
+                    if (routerStatusTop) {
+                        routerStatusTop.style.background = data.api_status === 'running' ? '#22c55e' : '#ef4444';
+                    }
+                    
+                    const routerStatus = document.getElementById('router-status');
+                    if (routerStatus) {
+                        routerStatus.style.background = data.api_status === 'running' ? '#22c55e' : '#ef4444';
+                    }
+                }
+            } catch (error) {
+                console.warn('Could not refresh health status:', error);
+            }
+        }
+        
+        // Refresh health status every 10 seconds
+        setInterval(refreshHealthStatus, 10000);
+        
+        // Save Ollama target configuration
+        async function saveOllamaTarget() {
+            const host = document.getElementById('ollama-target-host').value;
+            const port = parseInt(document.getElementById('ollama-target-port').value);
+            
+            try {
+                const response = await fetch(API_URL + '/config/ollama', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, port })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const statusEl = document.getElementById('ollama-target-status');
+                    if (statusEl) statusEl.textContent = `✅ Saved: ${result.base_url}`;
+                    // Refresh header display and status lights
+                    await refreshHealthStatus();
+                } else {
+                    const statusEl = document.getElementById('ollama-target-status');
+                    if (statusEl) statusEl.textContent = '❌ Error saving configuration';
+                }
+            } catch (error) {
+                const statusEl = document.getElementById('ollama-target-status');
+                if (statusEl) statusEl.textContent = '❌ Error: ' + error.message;
+            }
+        }
+        
+        // Save AirLLM configuration
+        async function saveAirLLMConfig() {
+            const enabled = document.getElementById('airllm-enabled').value === 'true';
+            const host = document.getElementById('airllm-host').value;
+            const port = parseInt(document.getElementById('airllm-port').value);
+            
+            try {
+                const response = await fetch(API_URL + '/config/airllm/service', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled, host, port })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const statusEl = document.getElementById('airllm-status');
+                    if (statusEl) statusEl.textContent = `✅ AirLLM ${enabled ? 'enabled' : 'disabled'}: ${result.base_url}`;
+                    // Refresh header display and status lights
+                    await refreshHealthStatus();
+                } else {
+                    const statusEl = document.getElementById('airllm-status');
+                    if (statusEl) statusEl.textContent = '❌ Error saving configuration';
+                }
+            } catch (error) {
+                const statusEl = document.getElementById('airllm-status');
+                if (statusEl) statusEl.textContent = '❌ Error: ' + error.message;
+            }
+        }
+        
+        // Track if initial load is done
+        let isInitialLoad = true;
         
         // Load data
         async function loadData() {
             try {
-                const [statsRes, modelsRes, configRes, requestsRes] = await Promise.all([
+                const [statsRes, modelsRes, configRes, airllmRes, requestsRes] = await Promise.all([
                     fetch(API_URL + '/stats'),
                     fetch(API_URL + '/models'),
                     fetch(API_URL + '/config/fallbacks'),
+                    fetch(API_URL + '/config/airllm'),
                     fetch(API_URL + '/requests')
                 ]);
                 
                 const stats = await statsRes.json();
                 const models = await modelsRes.json();
                 const config = await configRes.json();
+                const airllm = await airllmRes.json();
                 const requests = await requestsRes.json();
                 
                 // Update status
                 document.getElementById('total-requests').textContent = stats.total_requests || 0;
                 document.getElementById('models-count').textContent = models.total || 0;
+                
+                // Update Ollama Target form fields - only if empty or on initial load
+                const ollamaHostInput = document.getElementById('ollama-target-host');
+                const ollamaPortInput = document.getElementById('ollama-target-port');
+                if (isInitialLoad || !ollamaHostInput.value) {
+                    if (ollamaHostInput && airllm.ollama_host) {
+                        ollamaHostInput.value = airllm.ollama_host;
+                    }
+                }
+                if (isInitialLoad || !ollamaPortInput.value) {
+                    if (ollamaPortInput && airllm.ollama_port) {
+                        ollamaPortInput.value = airllm.ollama_port;
+                    }
+                }
+                
+                // Update AirLLM form fields - only if empty or on initial load
+                const airllmEnabledSelect = document.getElementById('airllm-enabled');
+                const airllmHostInput = document.getElementById('airllm-host');
+                const airllmPortInput = document.getElementById('airllm-port');
+                if (isInitialLoad || !airllmHostInput.value) {
+                    if (airllmEnabledSelect) {
+                        airllmEnabledSelect.value = airllm.airllm_enabled ? 'true' : 'false';
+                    }
+                }
+                if (isInitialLoad || !airllmHostInput.value) {
+                    if (airllmHostInput && airllm.airllm_host) {
+                        airllmHostInput.value = airllm.airllm_host;
+                    }
+                }
+                if (isInitialLoad || !airllmPortInput.value) {
+                    if (airllmPortInput && airllm.airllm_port) {
+                        airllmPortInput.value = airllm.airllm_port;
+                    }
+                }
+                
+                // Update timeout input
+                const timeoutInput = document.getElementById('timeout-input');
+                if (timeoutInput && isInitialLoad) {
+                    timeoutInput.value = config.timeout || 300;
+                }
+                
+                // Mark initial load as done
+                isInitialLoad = false;
                 
                 // Update models
                 const modelsList = document.getElementById('models-list');
@@ -399,40 +770,71 @@
                     });
                 });
                 
-                // Update model stats
+                // Update combined model stats table
                 const modelStatsBody = document.querySelector('#model-stats tbody');
                 modelStatsBody.innerHTML = '';
                 const avgTimes = stats.model_avg_times || {};
+                
+                // Get categories for each model
+                const modelCategories = {};
+                Object.entries(models.categories || {}).forEach(([cat, modelList]) => {
+                    modelList.forEach(m => {
+                        modelCategories[m] = cat;
+                    });
+                });
+                
+                // Get model attributes
+                const modelAttrs = models.models || {};
+                
+                // Sort by request count
                 Object.entries(stats.models || {}).sort((a,b) => b[1].count - a[1].count).forEach(([model, data]) => {
                     const pct = stats.total_requests > 0 ? ((data.count / stats.total_requests) * 100).toFixed(1) : 0;
                     const avgTime = avgTimes[model] || 0;
-                    modelStatsBody.innerHTML += `<tr><td>${model}</td><td>${data.count}</td><td>${avgTime}s</td><td>${pct}%</td></tr>`;
-                });
-                
-                // Update metrics (performance by model with attributes)
-                const metricsBody = document.querySelector('#metrics-stats tbody');
-                metricsBody.innerHTML = '';
-                Object.entries(models.models || {}).sort((a,b) => (b[1].speed || 0) - (a[1].speed || 0)).forEach(([model, data]) => {
-                    const avgTime = avgTimes[model] || '-';
-                    metricsBody.innerHTML += `<tr><td>${model}</td><td>${avgTime !== '-' ? avgTime + 's' : '-'}</td><td>${data.speed || '-'}/10</td><td>${data.complexity || '-'}/10</td></tr>`;
-                });
-                
-                // Update category stats
-                const catStatsBody = document.querySelector('#category-stats tbody');
-                catStatsBody.innerHTML = '';
-                Object.entries(stats.categories || {}).sort((a,b) => b[1] - a[1]).forEach(([cat, count]) => {
-                    const pct = stats.total_requests > 0 ? ((count / stats.total_requests) * 100).toFixed(1) : 0;
-                    catStatsBody.innerHTML += `<tr><td>${cat}</td><td>${count}</td><td>${pct}%</td></tr>`;
+                    const category = modelCategories[model] || '-';
+                    const attrs = modelAttrs[model] || {};
+                    const speed = attrs.speed || '-';
+                    const complexity = attrs.complexity || '-';
+                    const preferredFor = (attrs.preferred_for || []).slice(0, 2).join(', ') || '-';
+                    
+                    modelStatsBody.innerHTML += `<tr>
+                        <td style="font-weight:500;">${model}</td>
+                        <td><span style="background:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:10px;font-size:11px;">${category}</span></td>
+                        <td>${data.count}</td>
+                        <td>${avgTime}s</td>
+                        <td>${pct}%</td>
+                        <td>${speed}/10</td>
+                        <td>${complexity}/10</td>
+                        <td style="color:#666;font-size:12px;">${preferredFor}</td>
+                    </tr>`;
                 });
                 
                 // Update fallback config
                 document.getElementById('timeout-value').textContent = config.timeout || 300;
                 const fallbackList = document.getElementById('fallback-list');
-                fallbackList.innerHTML = '<table><thead><tr><th>Model</th><th>Fallback</th></tr></thead><tbody>';
-                Object.entries(config.fallbacks || {}).forEach(([model, fallback]) => {
-                    fallbackList.innerHTML += `<tr><td>${model}</td><td>${fallback}</td></tr>`;
-                });
-                fallbackList.innerHTML += '</tbody></table>';
+                
+                // Check if there are any fallbacks
+                const fallbacks = config.fallbacks || {};
+                const fallbackKeys = Object.keys(fallbacks);
+                
+                if (fallbackKeys.length === 0) {
+                    fallbackList.innerHTML = '<p style="color:#999;font-size:13px;text-align:center;padding:20px;">No fallback models configured</p>';
+                } else {
+                    let tableHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+                    tableHtml += '<thead><tr style="background:#f5f5f5;"><th style="padding:10px;text-align:left;border-bottom:2px solid #ddd;">Model</th><th style="padding:10px;text-align:left;border-bottom:2px solid #ddd;">Fallback</th><th style="padding:10px;text-align:center;border-bottom:2px solid #ddd;">Action</th></tr></thead>';
+                    tableHtml += '<tbody>';
+                    
+                    Object.entries(fallbacks).forEach(([model, fallback]) => {
+                        tableHtml += `<tr style="border-bottom:1px solid #eee;">`;
+                        tableHtml += `<td style="padding:10px;">${model}</td>`;
+                        tableHtml += `<td style="padding:10px;color:#10b981;font-weight:500;">${fallback}</td>`;
+                        tableHtml += `<td style="padding:10px;text-align:center;">`;
+                        tableHtml += `<button onclick="removeFallback('${model}')" style="background:#ef4444;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;">Remove</button>`;
+                        tableHtml += `</td></tr>`;
+                    });
+                    
+                    tableHtml += '</tbody></table>';
+                    fallbackList.innerHTML = tableHtml;
+                }
                 
                 // Update request log
                 const requestLogBody = document.querySelector('#request-log tbody');
@@ -454,6 +856,253 @@
                 loadData();
             } catch (e) {
                 console.error('Error clearing debug:', e);
+            }
+        }
+        
+        // Refresh models from Ollama
+        async function refreshModels() {
+            const btn = document.getElementById('refresh-models-btn');
+            const status = document.getElementById('refresh-status');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Refreshing...';
+            status.textContent = 'Refreshing models from Ollama...';
+            
+            try {
+                const response = await fetch(API_URL + '/models/refresh', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.new_models && result.new_models.length > 0) {
+                    status.textContent = `✅ Found ${result.new_models.length} new model(s): ${result.new_models.join(', ')}`;
+                } else {
+                    status.textContent = `✅ Models refreshed. Total: ${result.total_models}`;
+                }
+                
+                // Reload data to show new models
+                loadData();
+                
+                // Also reload the page after a short delay to refresh everything
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+                
+            } catch (e) {
+                console.error('Error refreshing models:', e);
+                status.textContent = '❌ Error: ' + e.message;
+                btn.disabled = false;
+                btn.textContent = '🔄 Reload from Ollama';
+            }
+        }
+        
+        // Run Performance Test
+        async function runPerformanceTest() {
+            const btn = document.getElementById('perf-test-btn');
+            const status = document.getElementById('perf-test-status');
+            const prompt = document.getElementById('perf-test-prompt').value;
+            const tbody = document.querySelector('#perf-test-results tbody');
+            
+            btn.disabled = true;
+            status.textContent = 'Initializing...';
+            tbody.innerHTML = '';
+            
+            const modes = [
+                { key: 'direct', label: 'Ollama Direct' },
+                { key: 'direct_airllm', label: 'Ollama AirLLM' },
+                { key: 'llm', label: 'LLM IntelliProxy' },
+                { key: 'llm_airllm', label: 'LLM IntelliProxy AirLLM' }
+            ];
+            
+            // Initialize empty rows for all tests
+            modes.forEach((mode, index) => {
+                const row = document.createElement('tr');
+                row.id = `perf-test-row-${index + 1}`;
+                row.innerHTML = `
+                    <td style="font-weight:500;">${mode.label}</td>
+                    <td class="perf-model">-</td>
+                    <td class="perf-duration">-</td>
+                    <td class="perf-tokens">-</td>
+                    <td class="perf-response" style="font-size:11px;color:#999;">Waiting...</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            try {
+                // Run tests sequentially by calling each one individually
+                for (let i = 0; i < modes.length; i++) {
+                    const mode = modes[i];
+                    
+                    // Update status to show current test
+                    status.textContent = `🔄 Running Test ${i + 1} of ${modes.length}: ${mode.label}...`;
+                    btn.textContent = `🔄 Test ${i + 1}/${modes.length}...`;
+                    
+                    // Update row to show running status
+                    const row = document.getElementById(`perf-test-row-${i + 1}`);
+                    if (row) {
+                        row.querySelector('.perf-response').textContent = '⏳ Running...';
+                        row.querySelector('.perf-response').style.color = '#f59e0b';
+                    }
+                    
+                    // Call the backend for this single test
+                    const response = await fetch(API_URL + '/performance-test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: prompt, mode: mode.key })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    // Update the row with results
+                    if (row && result.result) {
+                        const r = result.result;
+                        row.querySelector('.perf-model').textContent = r.model || '-';
+                        row.querySelector('.perf-duration').textContent = r.duration ? r.duration + 's' : '-';
+                        row.querySelector('.perf-tokens').textContent = r.tokens || 0;
+                        
+                        if (r.success) {
+                            row.querySelector('.perf-response').textContent = (r.response || '-').substring(0, 80) + '...';
+                            row.querySelector('.perf-response').style.color = '#333';
+                        } else {
+                            row.querySelector('.perf-response').textContent = r.response || r.error || 'Error';
+                            row.querySelector('.perf-response').style.color = 'red';
+                        }
+                    }
+                }
+                
+                status.textContent = '✅ Performance test completed!';
+                
+            } catch (e) {
+                console.error('Error running performance test:', e);
+                status.textContent = '❌ Error: ' + e.message;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = '▶ Run Performance Test';
+        }
+        
+        // Add a new fallback
+        async function addFallback() {
+            const modelSelect = document.getElementById('fallback-model-select');
+            const fallbackSelect = document.getElementById('fallback-target-select');
+            const model = modelSelect.value;
+            const fallback = fallbackSelect.value;
+            
+            if (!model || !fallback || model === fallback) {
+                alert('Please select different models for model and fallback');
+                return;
+            }
+            
+            try {
+                // Get current fallbacks
+                const res = await fetch(API_URL + '/config/fallbacks');
+                const config = await res.json();
+                const fallbacks = config.fallbacks || {};
+                
+                // Add new fallback
+                fallbacks[model] = fallback;
+                
+                // Save to backend
+                const response = await fetch(API_URL + '/config/fallbacks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fallbacks: fallbacks, timeout: config.timeout || 300 })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('fallback-status').textContent = '✅ Fallback added successfully!';
+                    loadData();
+                    populateModelSelects();
+                } else {
+                    document.getElementById('fallback-status').textContent = '❌ Error adding fallback';
+                }
+            } catch (e) {
+                console.error('Error adding fallback:', e);
+                document.getElementById('fallback-status').textContent = '❌ Error: ' + e.message;
+            }
+        }
+        
+        // Remove a fallback
+        async function removeFallback(model) {
+            if (!confirm(`Remove fallback for ${model}?`)) return;
+            
+            try {
+                const res = await fetch(API_URL + '/config/fallbacks');
+                const config = await res.json();
+                const fallbacks = config.fallbacks || {};
+                
+                delete fallbacks[model];
+                
+                const response = await fetch(API_URL + '/config/fallbacks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fallbacks: fallbacks, timeout: config.timeout || 300 })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('fallback-status').textContent = '✅ Fallback removed successfully!';
+                    loadData();
+                } else {
+                    document.getElementById('fallback-status').textContent = '❌ Error removing fallback';
+                }
+            } catch (e) {
+                console.error('Error removing fallback:', e);
+            }
+        }
+        
+        // Update timeout
+        async function updateTimeout() {
+            const timeout = parseInt(document.getElementById('timeout-input').value);
+            if (!timeout || timeout < 60) {
+                alert('Timeout must be at least 60 seconds');
+                return;
+            }
+            
+            try {
+                const res = await fetch(API_URL + '/config/fallbacks');
+                const config = await res.json();
+                
+                const response = await fetch(API_URL + '/config/fallbacks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fallbacks: config.fallbacks || {}, timeout: timeout })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('fallback-status').textContent = '✅ Timeout updated successfully!';
+                    loadData();
+                }
+            } catch (e) {
+                console.error('Error updating timeout:', e);
+            }
+        }
+        
+        // Populate model select dropdowns
+        async function populateModelSelects() {
+            try {
+                const res = await fetch(API_URL + '/models');
+                const data = await res.json();
+                const models = Object.keys(data.models || {});
+                
+                const modelSelect = document.getElementById('fallback-model-select');
+                const fallbackSelect = document.getElementById('fallback-target-select');
+                
+                // Save current selections
+                const currentModel = modelSelect.value;
+                const currentFallback = fallbackSelect.value;
+                
+                modelSelect.innerHTML = '<option value="">Select Model</option>';
+                fallbackSelect.innerHTML = '<option value="">Select Fallback</option>';
+                
+                models.forEach(m => {
+                    modelSelect.innerHTML += `<option value="${m}">${m}</option>`;
+                    fallbackSelect.innerHTML += `<option value="${m}">${m}</option>`;
+                });
+                
+                // Restore selections if still valid
+                if (models.includes(currentModel)) modelSelect.value = currentModel;
+                if (models.includes(currentFallback)) fallbackSelect.value = currentFallback;
+                
+            } catch (e) {
+                console.error('Error populating selects:', e);
             }
         }
         
@@ -482,3 +1131,4 @@
     </script>
 </body>
 </html>
+
