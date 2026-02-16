@@ -217,10 +217,42 @@ Open http://localhost:9999 in your browser.
 
 ## API Endpoints
 
-### Health Check
+### Health Check (Dashboard)
+
+```bash
+curl -s http://localhost:9998/api/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "models_available": 5,
+  "router_url": "http://localhost:9998",
+  "api_status": "running",
+  "ollama_url": "http://ollama:11434"
+}
+```
+
+### Health Check (/health)
 
 ```bash
 curl -s http://localhost:9998/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "models_available": 5,
+  "categories": {
+    "general": 2,
+    "code": 1,
+    "reasoning": 2
+  },
+  "ollama_url": "http://ollama:11434",
+  "classifier_model": "IntelliProxyLLM"
+}
 ```
 
 ### Get All Models
@@ -269,6 +301,60 @@ curl -s http://localhost:9998/requests
 curl -s -X POST http://localhost:9998/requests/clear
 ```
 
+### Clear Request Log
+
+```bash
+curl -s -X POST http://localhost:9998/requests/clear
+```
+
+### Get AirLLM Configuration
+
+```bash
+curl -s http://localhost:9998/config/airllm
+```
+
+Response:
+```json
+{
+  "ollama_host": "ollama",
+  "ollama_port": 11434,
+  "airllm_enabled": false,
+  "airllm_host": "airllm",
+  "airllm_port": 9996,
+  "model_airllm_settings": {}
+}
+```
+
+### Update Ollama Target Configuration
+
+```bash
+curl -s -X POST http://localhost:9998/config/ollama \
+  -H "Content-Type: application/json" \
+  -d '{"host":"192.168.1.100","port":11434}'
+```
+
+### Update AirLLM Service Configuration
+
+```bash
+curl -s -X POST http://localhost:9998/config/airllm/service \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":true,"host":"airllm","port":9996}'
+```
+
+### Enable/Disable AirLLM for a Specific Model
+
+```bash
+curl -s -X POST http://localhost:9998/config/model/airllm \
+  -H "Content-Type: application/json" \
+  -d '{"model_name":"qwen2.5:7b","enabled":true}'
+```
+
+### Refresh Models (Auto-discovery)
+
+```bash
+curl -s -X POST http://localhost:9998/models/refresh
+```
+
 ### Get Fallback Configuration
 
 ```bash
@@ -282,6 +368,26 @@ curl -s -X POST http://localhost:9998/config/fallbacks \
   -H "Content-Type: application/json" \
   -d '{"fallbacks":{"deepseek-r1:latest":"qwen2.5:7b"},"timeout":300}'
 ```
+
+### Run Performance Test
+
+Run all 4 performance tests:
+
+```bash
+curl -s -X POST http://localhost:9998/performance-test \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"What is a transparent proxy?"}'
+```
+
+Run a single test mode:
+
+```bash
+curl -s -X POST http://localhost:9998/performance-test \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"What is a transparent proxy?","mode":"direct"}'
+```
+
+Available modes: `direct`, `direct_airllm`, `llm`, `llm_airllm`
 
 ---
 

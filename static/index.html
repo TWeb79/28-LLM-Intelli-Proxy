@@ -952,8 +952,8 @@
                     const result = await response.json();
                     
                     // Update the row with results
-                    if (row && result.result) {
-                        const r = result.result;
+                    if (row && result.results && result.results.length > 0) {
+                        const r = result.results[0];
                         row.querySelector('.perf-model').textContent = r.model || '-';
                         row.querySelector('.perf-duration').textContent = r.duration ? r.duration + 's' : '-';
                         row.querySelector('.perf-tokens').textContent = r.tokens || 0;
