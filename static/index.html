@@ -155,9 +155,9 @@
         <h1>IntelliProxy</h1>
         <nav>
             <a href="#status">Status</a>
+            <a href="#config">Config</a>
             <a href="#models">Models</a>
             <a href="#stats">Statistics</a>
-            <a href="#config">Config</a>
             <a href="#airllm-config">AirLLM</a>
             <a href="#api">API</a>
             <a href="#debug">Debug</a>
@@ -187,6 +187,95 @@
             </div>
         </div>
     </section>
+
+    <section id="airllm-config">
+        <h2>AirLLM & Ollama Configuration</h2>
+        
+        <!-- Connection Visualization -->
+        <div class="card" style="margin-bottom:16px;background:#f8f9fa;">
+            <h3>🔌 Connection Flow</h3>
+            <div id="connection-flow" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:20px 0;flex-wrap:wrap;">
+                <!-- Dynamic content loaded based on AirLLM status -->
+                <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #ddd;text-align:center;">
+                    <div style="font-size:24px;">⚡</div>
+                    <div style="font-weight:500;font-size:12px;">LLM IntelliProxy</div>
+                    <div style="font-size:10px;color:#666;">Port 9998</div>
+                </div>
+                <div style="font-size:20px;color:#666;">→</div>
+                <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #4caf50;text-align:center;">
+                    <div style="font-size:24px;">🦙</div>
+                    <div style="font-weight:500;font-size:12px;">Ollama</div>
+                    <div style="font-size:10px;color:#666;">Port 9997</div>
+                </div>
+            </div>
+            
+            <!-- Path explanation -->
+            <div style="margin-top:16px;padding:12px;background:#fff;border-radius:6px;">
+                <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">
+                    <div style="flex:1;min-width:200px;">
+                        <strong>Path A (IntelliProxy):</strong><br/>
+                        <span style="color:#4caf50;">Client → Proxy → Ollama</span><br/>
+                        <span style="color:#999;">Automatic model selection with fallback</span>
+                    </div>
+                    <div style="flex:1;min-width:200px;">
+                        <strong>Path B (Direct):</strong><br/>
+                        <span style="color:#666;">Client → Ollama (direct)</span><br/>
+                        <span style="color:#999;">Use specific model directly</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Ollama Target Configuration -->
+        <div class="card" style="margin-bottom:16px;">
+            <h3>🎯 Target Ollama Connection</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:12px;">Configure the target Ollama IP and port for decentralized connections</p>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Host IP</label>
+                    <input type="text" id="ollama-target-host" placeholder="127.0.0.1" style="width:200px;" />
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Port</label>
+                    <input type="number" id="ollama-target-port" placeholder="9997" style="width:100px;" />
+                </div>
+                <div style="margin-top:18px;">
+                    <button class="btn" onclick="saveOllamaTarget()">Save Target</button>
+                </div>
+            </div>
+            <p id="ollama-target-status" style="font-size:11px;margin-top:8px;color:#10b981;"></p>
+        </div>
+        
+        <!-- AirLLM Service Configuration -->
+        <div class="card" style="margin-bottom:16px;">
+            <h3>✈️ AirLLM Service</h3>
+            <p style="font-size:12px;color:#666;margin-bottom:12px;">AirLLM provides KV cache compression for large models (70B+). Enable the service and configure per-model routing.</p>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Enable AirLLM</label>
+                    <select id="airllm-enabled" style="width:120px;" onchange="toggleAirLLMService()">
+                        <option value="false">Disabled</option>
+                        <option value="true">Enabled</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">AirLLM Host</label>
+                    <input type="text" id="airllm-host" placeholder="127.0.0.1" style="width:150px;" />
+                </div>
+                <div>
+                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">AirLLM Port</label>
+                    <input type="number" id="airllm-port" placeholder="9996" style="width:100px;" />
+                </div>
+                <div style="margin-top:18px;">
+                    <button class="btn" onclick="saveAirLLMConfig()">Save AirLLM</button>
+                </div>
+            </div>
+            <p id="airllm-status" style="font-size:11px;margin-top:8px;color:#10b981;"></p>
+        </div>
+        
+
+    </section>
+
 
     <section id="models">
         <h2>Available Models</h2>
@@ -229,7 +318,10 @@
     <section id="debug">
         <h2>Request Log (Last 50)</h2>
         <div class="card">
-            <button class="btn" onclick="clearDebug()" style="margin-bottom:12px;">Clear Log</button>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <button class="btn" onclick="refreshAllData()" style="background:#4caf50;">🔄 Refresh</button>
+                <button class="btn" onclick="clearDebug()" style="background:#ef4444;">Clear Log</button>
+            </div>
             <table id="request-log">
                 <thead><tr><th>Time</th><th>Model</th><th>Task Type</th><th>Response Time</th><th>Prompt</th></tr></thead>
                 <tbody></tbody>
@@ -283,109 +375,6 @@
         </div>
     </section>
 
-    <section id="airllm-config">
-        <h2>AirLLM & Ollama Configuration</h2>
-        
-        <!-- Connection Visualization -->
-        <div class="card" style="margin-bottom:16px;background:#f8f9fa;">
-            <h3>🔌 Connection Flow</h3>
-            <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:20px 0;flex-wrap:wrap;">
-                <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #ddd;text-align:center;">
-                    <div style="font-size:24px;">⚡</div>
-                    <div style="font-weight:500;font-size:12px;">LLM IntelliProxy</div>
-                    <div style="font-size:10px;color:#666;">Port 9998</div>
-                </div>
-                <div style="font-size:20px;color:#666;">→</div>
-                <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #ddd;text-align:center;">
-                    <div style="font-size:24px;">💻</div>
-                    <div style="font-weight:500;font-size:12px;">LLM IntelliProxy Config</div>
-                    <div style="font-size:10px;color:#666;">Port 9999</div>
-                </div>
-                <div style="font-size:20px;color:#666;">→</div>
-                <div style="background:#e3f2fd;padding:12px 16px;border-radius:8px;border:1px solid #2196f3;text-align:center;">
-                    <div style="font-size:24px;">✈️</div>
-                    <div style="font-weight:500;font-size:12px;">AirLLM</div>
-                    <div style="font-size:10px;color:#666;">Port 9996</div>
-                </div>
-                <div style="font-size:20px;color:#666;">→</div>
-                <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #4caf50;text-align:center;">
-                    <div style="font-size:24px;">🦙</div>
-                    <div style="font-weight:500;font-size:12px;">Ollama</div>
-                    <div style="font-size:10px;color:#666;">Port 9997</div>
-                </div>
-            </div>
-            
-            <!-- Path explanation -->
-            <div style="margin-top:16px;padding:12px;background:#fff;border-radius:6px;">
-                <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">
-                    <div style="flex:1;min-width:200px;">
-                        <strong>Path A (Direct):</strong><br/>
-                        <span style="color:#4caf50;">Client → Proxy → Ollama</span><br/>
-                        <span style="color:#999;">For models without AirLLM</span>
-                    </div>
-                    <div style="flex:1;min-width:200px;">
-                        <strong>Path B (via AirLLM):</strong><br/>
-                        <span style="color:#2196f3;">Client → Proxy → AirLLM → Ollama</span><br/>
-                        <span style="color:#999;">For large models (70B+) with compression</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Ollama Target Configuration -->
-        <div class="card" style="margin-bottom:16px;">
-            <h3>🎯 Target Ollama Connection</h3>
-            <p style="font-size:12px;color:#666;margin-bottom:12px;">Configure the target Ollama IP and port for decentralized connections</p>
-            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-                <div>
-                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Host IP</label>
-                    <input type="text" id="ollama-target-host" placeholder="127.0.0.1" style="width:200px;" />
-                </div>
-                <div>
-                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Port</label>
-                    <input type="number" id="ollama-target-port" placeholder="9997" style="width:100px;" />
-                </div>
-                <div style="margin-top:18px;">
-                    <button class="btn" onclick="saveOllamaTarget()">Save Target</button>
-                </div>
-            </div>
-            <p id="ollama-target-status" style="font-size:11px;margin-top:8px;color:#10b981;"></p>
-        </div>
-        
-        <!-- AirLLM Service Configuration -->
-        <div class="card" style="margin-bottom:16px;">
-            <h3>✈️ AirLLM Service</h3>
-            <p style="font-size:12px;color:#666;margin-bottom:12px;">AirLLM provides KV cache compression for large models (70B+). Enable the service and configure per-model routing.</p>
-            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-                <div>
-                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Enable AirLLM</label>
-                    <select id="airllm-enabled" style="width:120px;" onchange="toggleAirLLMService()">
-                        <option value="false">Disabled</option>
-                        <option value="true">Enabled</option>
-                    </select>
-                </div>
-                <div>
-                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">AirLLM Host</label>
-                    <input type="text" id="airllm-host" placeholder="127.0.0.1" style="width:150px;" />
-                </div>
-                <div>
-                    <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">AirLLM Port</label>
-                    <input type="number" id="airllm-port" placeholder="9996" style="width:100px;" />
-                </div>
-                <div style="margin-top:18px;">
-                    <button class="btn" onclick="saveAirLLMConfig()">Save AirLLM</button>
-                </div>
-            </div>
-            <p id="airllm-status" style="font-size:11px;margin-top:8px;color:#10b981;"></p>
-        </div>
-        
-        <!-- Model-specific AirLLM Configuration -->
-        <div class="card">
-            <h3>📦 AirLLM per Model</h3>
-            <p style="font-size:12px;color:#666;margin-bottom:12px;">Enable AirLLM acceleration for specific models. Requests to these models will be routed through AirLLM.</p>
-            <div id="model-airllm-list" class="grid"></div>
-        </div>
-    </section>
 
     <section id="api">
         <h2>API Reference</h2>
@@ -423,7 +412,7 @@
         <!-- Process Task -->
         <div class="card">
             <h3>Process Task</h3>
-            <p style="font-size:12px;color:#666;margin-bottom:8px;">Process a task with intelligent routing. Auto-classifies if task_type is null.</p>
+            <p style="font-size:12px;color:#666;margin-bottom:8px;">Process a task with intelligent routing. Auto-classifies if task_type is null. Uses AirLLM automatically if enabled for the selected model.</p>
             <pre>POST /task
 {
   "prompt": "Your prompt here",
@@ -859,6 +848,18 @@
             }
         }
         
+        // Manual refresh function - called by refresh button
+        async function refreshAllData() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ Loading...';
+            
+            await loadData();
+            
+            btn.disabled = false;
+            btn.innerHTML = '🔄 Refresh';
+        }
+        
         // Refresh models from Ollama
         async function refreshModels() {
             const btn = document.getElementById('refresh-models-btn');
@@ -907,9 +908,7 @@
             
             const modes = [
                 { key: 'direct', label: 'Ollama Direct' },
-                { key: 'direct_airllm', label: 'Ollama AirLLM' },
-                { key: 'llm', label: 'LLM IntelliProxy' },
-                { key: 'llm_airllm', label: 'LLM IntelliProxy AirLLM' }
+                { key: 'intelliproxy', label: 'IntelliProxy (Auto-Select)' }
             ];
             
             // Initialize empty rows for all tests
@@ -1011,6 +1010,8 @@
                     document.getElementById('fallback-status').textContent = '✅ Fallback added successfully!';
                     loadData();
                     populateModelSelects();
+                    // Reload page to refresh the fallback table
+                    setTimeout(() => location.reload(), 1000);
                 } else {
                     document.getElementById('fallback-status').textContent = '❌ Error adding fallback';
                 }
@@ -1040,6 +1041,8 @@
                 if (response.ok) {
                     document.getElementById('fallback-status').textContent = '✅ Fallback removed successfully!';
                     loadData();
+                    // Reload page to refresh the fallback table
+                    setTimeout(() => location.reload(), 1000);
                 } else {
                     document.getElementById('fallback-status').textContent = '❌ Error removing fallback';
                 }

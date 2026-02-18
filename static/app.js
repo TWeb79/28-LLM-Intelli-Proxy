@@ -1,6 +1,8 @@
 // App Configuration
+// Use current host if available, otherwise default to localhost
+const currentHost = window.location.hostname;
 const APP_CONFIG = {
-    apiUrl: 'http://localhost:9998'  // Changed from 8000 to 9998
+    apiUrl: `http://${currentHost}:9998`  // Use dynamic hostname
 };
 
 // Feature matrix loaded from JSON config
@@ -99,6 +101,20 @@ async function updateStats() {
     }
 }
 
+// Manual refresh function - called by refresh button
+async function refreshAllData() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳ Loading...';
+    
+    await updateStats();
+    await updateFallbackConfig();
+    await updateAirLLMConfig();
+    
+    btn.disabled = false;
+    btn.innerHTML = '🔄 Refresh';
+}
+
 // Fetch fallback configuration from server
 async function updateFallbackConfig() {
     try {
@@ -162,7 +178,7 @@ async function updateAirLLMConfig() {
 // Refresh health status in header (called after saving config)
 async function refreshHealthStatus() {
     try {
-        const response = await fetch(`${APP_CONFIG.apiUrl}/api/health`);
+        const response = await fetch(`${APP_CONFIG.apiUrl}/health`);
         if (response.ok) {
             const data = await response.json();
             
@@ -170,6 +186,12 @@ async function refreshHealthStatus() {
             const ollamaUrlTop = document.getElementById('ollama-url-top');
             if (ollamaUrlTop) {
                 ollamaUrlTop.textContent = data.ollama_url || 'Not configured';
+            }
+            
+            // Update header Router URL display
+            const routerUrlTop = document.getElementById('router-url-top');
+            if (routerUrlTop) {
+                routerUrlTop.textContent = data.router_url || 'Not configured';
             }
             
             // Update main Ollama URL display
@@ -429,7 +451,12 @@ function renderUsageStats() {
     
     let html = `
         <div class="stats-header">
-            <h3>📊 Overall Statistics</h3>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <h3>📊 Overall Statistics</h3>
+                <button onclick="refreshAllData()" style="background:#4caf50;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:4px;">
+                    🔄 Refresh
+                </button>
+            </div>
             <p>Total Requests: <strong>${stats.total_requests}</strong></p>
             <p>Last Updated: <strong>${new Date(stats.last_update).toLocaleTimeString()}</strong></p>
         </div>

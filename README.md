@@ -424,7 +424,8 @@ Response includes `IntelliProxyLLM` for intelligent routing:
 ### Generate (with intelligent routing)
 
 ```bash
-# Use IntelliProxyLLM for automatic model selection
+# Use IntelliProxyLLM for automatic model selection with prompt analysis
+# AirLLM is automatically used if enabled for the recommended model
 curl -s -X POST http://localhost:9998/api/generate \
   -H "Content-Type: application/json" \
   -d '{"model": "IntelliProxyLLM", "prompt": "Explain quantum computing"}'
@@ -438,6 +439,8 @@ curl -s -X POST http://localhost:9998/api/generate \
 ### Chat (with intelligent routing)
 
 ```bash
+# Use IntelliProxyLLM for automatic model selection
+# The proxy analyzes your message and selects the best model
 curl -s -X POST http://localhost:9998/api/chat \
   -H "Content-Type: application/json" \
   -d '{
@@ -445,6 +448,12 @@ curl -s -X POST http://localhost:9998/api/chat \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+### How IntelliProxy Selects Models
+
+1. **Prompt Analysis**: The proxy uses an LLM to classify your prompt into categories (code, reasoning, vision, image, general, uncensored)
+2. **Model Selection**: Based on the category and prompt complexity, it selects the best available model
+3. **AirLLM Routing**: If AirLLM is enabled for the selected model, the request is automatically routed through AirLLM for KV cache compression (useful for large 70B+ models)
 
 ### Streaming Support
 

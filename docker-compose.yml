@@ -31,7 +31,14 @@ services:
         echo "Starting Ollama..."
         exec /bin/ollama serve
 
-  # Intelligent Router Proxy
+  # AirLLM is not available as a Docker image.
+  # To use AirLLM compression, install it separately and configure manually.
+  # See: https://github.com/llm-air/llm-air
+  # airllm:
+
+  # ============================================================================
+  # Intelligent Router Proxy (UPDATED for AirLLM sync)
+  # ============================================================================
   router:
     build:
       context: .
@@ -44,22 +51,39 @@ services:
       - ./static:/app/static
       - router-data:/app/data  # Persistent configuration data
     environment:
-      # Connect to Ollama on same docker network
+      # ============================================================================
+      # Ollama Configuration (Docker internal)
+      # ============================================================================
       - OLLAMA_BASE_URL=http://ollama:11434
       
-      # Target Ollama (for decentralized connections)
+      # Target Ollama (Using Docker internal hostname)
       - OLLAMA_TARGET_HOST=ollama
       - OLLAMA_TARGET_PORT=11434
       
-      # AirLLM Configuration (disabled by default)
-      - AIRLLM_ENABLED=false
-      - AIRLLM_HOST=airllm
+      # ============================================================================
+      # AirLLM Configuration (Enabled by default)
+      # ============================================================================
+      # Note: AirLLM must be running on host machine or separately
+      # For host access, use: host.docker.internal
+      - AIRLLM_ENABLED=true
+      - AIRLLM_HOST=host.docker.internal
+      - AIRLLM_PORT=9996
+      - AIRLLM_HOST=airllm        # Docker service name
       - AIRLLM_PORT=9996
       
-      # Data directory for persistent config
-      - DATA_DIR=/app/data
+      # Note: AIRLLM_TARGET (ollama backend) is now automatically synced
+      # on startup via initialize_airllm() function
       
-      # API Server
+      # ============================================================================
+      # Data & Configuration
+      # ============================================================================
+      - DATA_DIR=/app/data
+      - HOST_IP=192.168.6.149
+      
+      # ============================================================================
+      # Server Configuration
+      # ============================================================================
+      # API Server (Proxy)
       - PROXY_HOST=0.0.0.0
       - PROXY_PORT=9998
       
@@ -67,14 +91,42 @@ services:
       - WEB_HOST=0.0.0.0
       - WEB_PORT=9999
       
-      # Classifier model
+      # ============================================================================
+      # Model Configuration
+      # ============================================================================
+      # Classifier model for task classification
       - CLASSIFIER_MODEL=qwen2.5:7b
+      
+      # Default model for requests without specific model
+      - DEFAULT_MODEL=qwen2.5:7b
+      
+      # Enable auto-discovery of new models
+      - ENABLE_AUTO_DISCOVERY=true
+      
+      # Request timeout (900 seconds = 15 minutes)
+      - REQUEST_TIMEOUT=900
+    
+    # Note: AirLLM service is not available as Docker image
+    # Router will start without AirLLM support
     depends_on:
       ollama:
         condition: service_started
+    
     restart: unless-stopped
+    
     networks:
       - ollama-network
+    
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    
+    # Optional: Add health check for router
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9998/health/full"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   ollama-data:
@@ -85,3 +137,42 @@ volumes:
 networks:
   ollama-network:
     driver: bridge
+
+# ============================================================================
+# IMPORTANT NOTES
+# ============================================================================
+# 
+# 1. INITIALIZATION:
+#    - On startup, the router will automatically configure AirLLM
+#    - Check logs: docker logs ollama-router
+#    - You should see: "✅ AirLLM successfully configured with Ollama backend"
+#
+# 2. VERIFICATION:
+#    - Check health: curl http://localhost:9998/health/full
+#    - Should show: "overall_status": "✅ healthy"
+#
+# 3. CONFIGURATION:
+#    - Settings are persisted to router-data volume
+#    - File: /app/data/router_config.json
+#
+# 4. CHANGING OLLAMA:
+#    - If you move Ollama to external machine, update:
+#      - OLLAMA_TARGET_HOST to the external IP
+#      - AirLLM's OLLAMA_HOST environment variable
+#    - Router will auto-sync both on next startup
+#
+# 5. MODELS & AirLLM:
+#    - By default, NO models use AirLLM compression
+#    - To enable for a model:
+#      POST /config/model/airllm
+#      {"model_name": "deepseek-r1:latest", "enabled": true}
+#
+# 6. LOGS:
+#    - docker logs ollama-router -f     # Router logs
+#    - docker logs airllm-service -f    # AirLLM logs
+#    - docker logs ollama-server -f     # Ollama logs
+#
+# 7. BACKING UP:
+#    - Important data in router-data volume
+#    - Can be backed up: docker cp ollama-router:/app/data ./backup/
+#
