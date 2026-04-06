@@ -2,7 +2,7 @@
 """
 Ollama Compatible Client for IntelliProxy
 Standard Ollama client implementation with IntelliProxy as the default model.
-Connects to proxy on port 9998 instead of standard Ollama port.
+Connects to proxy on port 8128 instead of standard Ollama port.
 
 Routing Modes:
 1. DIRECT - Connect directly to Ollama (bypass IntelliProxy)
@@ -33,9 +33,9 @@ class OllamaClient:
     """
     
     # Default endpoints
-    OLLAMA_DIRECT = "http://localhost:9997"  # Direct Ollama (docker port 9997)
-    PROXY_URL = "http://localhost:9998"       # IntelliProxy API
-    AIRLLM_URL = "http://localhost:9996"       # AirLLM
+    OLLAMA_DIRECT = "http://localhost:8928"  # Direct Ollama (docker port 8928 per RULES_ports: 89xx)
+    PROXY_URL = "http://localhost:8128"       # IntelliProxy API
+    AIRLLM_URL = "http://localhost:8128"       # AirLLM
     
     def __init__(
         self,

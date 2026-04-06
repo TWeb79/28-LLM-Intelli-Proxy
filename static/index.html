@@ -199,13 +199,13 @@
                 <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #ddd;text-align:center;">
                     <div style="font-size:24px;">⚡</div>
                     <div style="font-weight:500;font-size:12px;">LLM IntelliProxy</div>
-                    <div style="font-size:10px;color:#666;">Port 9998</div>
+                    <div style="font-size:10px;color:#666;">Port 8128</div>
                 </div>
                 <div style="font-size:20px;color:#666;">→</div>
                 <div style="background:#fff;padding:12px 16px;border-radius:8px;border:1px solid #4caf50;text-align:center;">
                     <div style="font-size:24px;">🦙</div>
                     <div style="font-weight:500;font-size:12px;">Ollama</div>
-                    <div style="font-size:10px;color:#666;">Port 9997</div>
+                    <div style="font-size:10px;color:#666;">Port 8928</div>
                 </div>
             </div>
             
@@ -237,7 +237,7 @@
                 </div>
                 <div>
                     <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">Port</label>
-                    <input type="number" id="ollama-target-port" placeholder="9997" style="width:100px;" />
+                    <input type="number" id="ollama-target-port" placeholder="8928" style="width:100px;" />
                 </div>
                 <div style="margin-top:18px;">
                     <button class="btn" onclick="saveOllamaTarget()">Save Target</button>
@@ -264,7 +264,7 @@
                 </div>
                 <div>
                     <label style="font-size:12px;color:#999;display:block;margin-bottom:4px;">AirLLM Port</label>
-                    <input type="number" id="airllm-port" placeholder="9996" style="width:100px;" />
+                    <input type="number" id="airllm-port" placeholder="8128" style="width:100px;" />
                 </div>
                 <div style="margin-top:18px;">
                     <button class="btn" onclick="saveAirLLMConfig()">Save AirLLM</button>
@@ -379,7 +379,7 @@
     <section id="api">
         <h2>API Reference</h2>
         <div class="card" style="margin-bottom:16px;">
-            <p><strong>Base URL:</strong> <code id="api-base-url">http://HOST_IP:9998</code></p>
+            <p><strong>Base URL:</strong> <code id="api-base-url">http://HOST_IP:8128</code></p>
         </div>
         
         <!-- Health Check -->
@@ -388,7 +388,7 @@
             <p style="font-size:12px;color:#666;margin-bottom:8px;">Check router and Ollama status</p>
             <pre>GET /health</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s http://localhost:9998/health</pre>
+            <pre style="margin-top:4px;">curl -s http://localhost:8128/health</pre>
         </div>
         
         <!-- Get Models -->
@@ -397,7 +397,7 @@
             <p style="font-size:12px;color:#666;margin-bottom:8px;">List all available models with attributes (speed, complexity)</p>
             <pre>GET /models</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s http://localhost:9998/models</pre>
+            <pre style="margin-top:4px;">curl -s http://localhost:8128/models</pre>
         </div>
         
         <!-- Get Models by Category -->
@@ -406,7 +406,7 @@
             <p style="font-size:12px;color:#666;margin-bottom:8px;">List models in a specific category</p>
             <pre>GET /models/{category}</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s http://localhost:9998/models/general</pre>
+            <pre style="margin-top:4px;">curl -s http://localhost:8128/models/general</pre>
         </div>
         
         <!-- Process Task -->
@@ -420,7 +420,7 @@
   "stream": false
 }</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s -X POST http://localhost:9998/task \
+            <pre style="margin-top:4px;">curl -s -X POST http://localhost:8128/task \
   -H "Content-Type: application/json" \
   -d '{"prompt":"Hello","task_type":"general"}'</pre>
         </div>
@@ -436,7 +436,7 @@
   "stream": false
 }</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s -X POST http://localhost:9998/classify \
+            <pre style="margin-top:4px;">curl -s -X POST http://localhost:8128/classify \
   -H "Content-Type: application/json" \
   -d '{"prompt":"Write code"}'</pre>
         </div>
@@ -447,7 +447,7 @@
             <p style="font-size:12px;color:#666;margin-bottom:8px;">Usage statistics including avg response time per model</p>
             <pre>GET /stats</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s http://localhost:9998/stats</pre>
+            <pre style="margin-top:4px;">curl -s http://localhost:8128/stats</pre>
         </div>
         
         <!-- Get Requests -->
@@ -456,7 +456,7 @@
             <p style="font-size:12px;color:#666;margin-bottom:8px;">Get last 50 requests with prompts and response times</p>
             <pre>GET /requests</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s http://localhost:9998/requests</pre>
+            <pre style="margin-top:4px;">curl -s http://localhost:8128/requests</pre>
         </div>
         
         <!-- Clear Requests -->
@@ -465,7 +465,7 @@
             <p style="font-size:12px;color:#666;margin-bottom:8px;">Clear the request log</p>
             <pre>POST /requests/clear</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s -X POST http://localhost:9998/requests/clear</pre>
+            <pre style="margin-top:4px;">curl -s -X POST http://localhost:8128/requests/clear</pre>
         </div>
         
         <!-- Get Fallbacks -->
@@ -474,7 +474,7 @@
             <p style="font-size:12px;color:#666;margin-bottom:8px;">Get model fallback configuration</p>
             <pre>GET /config/fallbacks</pre>
             <p style="font-size:11px;color:#999;margin-top:8px;">Example:</p>
-            <pre style="margin-top:4px;">curl -s http://localhost:9998/config/fallbacks</pre>
+            <pre style="margin-top:4px;">curl -s http://localhost:8128/config/fallbacks</pre>
         </div>
         
         <!-- Update Fallbacks -->
@@ -494,9 +494,9 @@
     </footer>
 
     <script>
-        // IntelliProxy runs on port 9998, Dashboard on 9999
-        const ROUTER_PORT = 9998;
-        const STATIC_PORT = 9999;
+        // IntelliProxy runs on port 8128, Dashboard on 8028
+        const ROUTER_PORT = 8128;
+        const STATIC_PORT = 8028;
         const HOST_IP = window.location.hostname;
         const API_URL = `http://${HOST_IP}:${ROUTER_PORT}`;
         const OLLAMA_PORT = 11434;

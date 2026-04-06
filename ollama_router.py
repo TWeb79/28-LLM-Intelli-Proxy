@@ -47,9 +47,9 @@ AIRLLM_CONFIG = {
     "ollama_backend": None
 }
 
-PROXY_PORT = int(os.getenv("PROXY_PORT", "9998"))
+PROXY_PORT = int(os.getenv("PROXY_PORT", "8128"))
 PROXY_HOST = os.getenv("PROXY_HOST", "127.0.0.1")
-WEB_PORT = int(os.getenv("WEB_PORT", "9999"))
+WEB_PORT = int(os.getenv("WEB_PORT", "8028"))
 WEB_HOST = os.getenv("WEB_HOST", "127.0.0.1")
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "900"))
 CLASSIFIER_MODEL = os.getenv("CLASSIFIER_MODEL", "qwen2.5:7b")
@@ -145,6 +145,7 @@ class ModelScoreCache:
         """Pre-compute all model scores"""
         with self.lock:
             self.scores = model_attrs
+            return self.scores
     
     def get_score(self, model_name: str) -> Optional[Dict]:
         """Get model score"""

@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  # Ollama service (internal to docker network on port 9997)
+  # Ollama service (internal to docker network on port 11434)
   ollama:
     image: ollama/ollama:latest
-    container_name: ollama-server
+    container_name: ollama-server-28
     ports:
-      - "9997:11434"  # External port 9997 → Internal 11434
+      - "8928:11434"  # External port 8928 → Internal 11434 (LLM per RULES_ports: 89xx)
     volumes:
       - ollama-data:/root/.ollama
       - D:/AI.OllamaModels:/import-models:ro
@@ -45,8 +45,8 @@ services:
       dockerfile: Dockerfile
     container_name: ollama-router
     ports:
-      - "9998:9998"    # API endpoint (applications connect here)
-      - "9999:9999"    # Web Dashboard
+      - "8128:8128"    # API endpoint (applications connect here)
+      - "8028:8028"    # Web Dashboard
     volumes:
       - ./static:/app/static
       - router-data:/app/data  # Persistent configuration data
@@ -67,9 +67,9 @@ services:
       # For host access, use: host.docker.internal
       - AIRLLM_ENABLED=true
       - AIRLLM_HOST=host.docker.internal
-      - AIRLLM_PORT=9996
+      - AIRLLM_PORT=8128
       - AIRLLM_HOST=airllm        # Docker service name
-      - AIRLLM_PORT=9996
+      - AIRLLM_PORT=8128
       
       # Note: AIRLLM_TARGET (ollama backend) is now automatically synced
       # on startup via initialize_airllm() function
@@ -85,11 +85,11 @@ services:
       # ============================================================================
       # API Server (Proxy)
       - PROXY_HOST=0.0.0.0
-      - PROXY_PORT=9998
+      - PROXY_PORT=8128
       
       # Web Dashboard
       - WEB_HOST=0.0.0.0
-      - WEB_PORT=9999
+      - WEB_PORT=8028
       
       # ============================================================================
       # Model Configuration
@@ -122,7 +122,7 @@ services:
     
     # Optional: Add health check for router
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9998/health/full"]
+      test: ["CMD", "curl", "-f", "http://localhost:8128/health/full"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -2,7 +2,7 @@
 // Use current host if available, otherwise default to localhost
 const currentHost = window.location.hostname;
 const APP_CONFIG = {
-    apiUrl: `http://${currentHost}:9998`  // Use dynamic hostname
+    apiUrl: `http://${currentHost}:8128`  // Use dynamic hostname
 };
 
 // Feature matrix loaded from JSON config
@@ -84,7 +84,7 @@ let airllmConfig = {
     ollama_port: 11434,
     airllm_enabled: false,
     airllm_host: "airllm",
-    airllm_port: 9996,
+    airllm_port: 8128,
     model_airllm_settings: {}
 };
 
