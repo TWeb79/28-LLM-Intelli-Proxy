@@ -9,6 +9,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from typing import List, Dict, Optional
+import json
 
 # DB path should match the main application DATA_DIR/llmproxy.db
 DB_PATH = os.getenv("DATA_DIR", "/data")
@@ -81,3 +82,26 @@ def mark_assessed(provider: str, model_id: str, category: str, description: str)
             "UPDATE model_registry SET assessed=1, category=?, description=? WHERE provider=? AND id=?",
             (category, description, provider, model_id)
         )
+
+
+def persist_decision(prompt: str, selected_model: str, provider: Optional[str], reason: str, latency_ms: int, token_count: int = 0, routing_mode: str = "auto") -> None:
+    """Persist a routing decision to the decision_backlog table.
+
+    This centralizes DB writes so other services can call into the registry
+    service instead of manipulating the DB directly.
+    """
+    prompt_hash = json.dumps(prompt)[:200]
+    preview = prompt[:200]
+    with get_db() as conn:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO decision_backlog (prompt_hash, prompt_preview, selected_model, provider, reason, latency_ms, token_count, request_data, routing_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (prompt_hash, preview, selected_model, provider, reason, latency_ms, token_count, None, routing_mode)
+            )
+        except Exception:
+            # Fallback for older schema without routing_mode
+            cur.execute(
+                "INSERT INTO decision_backlog (prompt_hash, prompt_preview, selected_model, provider, reason, latency_ms, token_count, request_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (prompt_hash, preview, selected_model, provider, reason, latency_ms, token_count, None)
+            )

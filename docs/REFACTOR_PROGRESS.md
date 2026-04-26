@@ -18,7 +18,10 @@ Current status of the refactor and remaining tasks for the IntelliProxy project.
 - [x] Wire assessor into provider discovery and run assessments asynchronously
 - [x] Implement model passthrough + virtual intelliproxy-auto and /v1/models
 - [x] Add structured JSON logging (services/logging_config.py)
-- [ ] Refactor code into smaller modules (split ollama_router.py) — in progress: api/app.py and services/router_service.py added as compatibility shims
+ - [x] Centralize decision persistence in services/registry.py
+ - [x] Create api/app.py compatibility entrypoint and services/router_service.py
+ - [x] Add services/router_impl.py, services/router_helpers.py, services/model_metadata.py
+ - [ ] Refactor code into smaller modules (split ollama_router.py) — in progress
 - [ ] Add NVIDIA NIM + generic providers
 - [ ] Add Dashboard endpoints and live feed
 - [ ] Add tests and CI validation

@@ -15,14 +15,16 @@ RUN python -m pip install --upgrade pip && pip wheel --no-deps --wheel-dir /whee
 FROM python:3.11-slim AS runtime
 WORKDIR /app
 
-# Create non-root user
-RUN addgroup --system proxy && adduser --system --ingroup proxy proxy
+# Create non-root user (handle case where group might already exist)
+RUN (getent group proxy >/dev/null 2>&1 || addgroup --system proxy) && \
+    (getent passwd proxy >/dev/null 2>&1 || adduser --system --ingroup proxy proxy)
 
 # Create data dir owned by runtime user
 RUN mkdir -p /data && chown proxy:proxy /data
 
 # Copy installed wheels and install
 COPY --from=builder /wheels /wheels
+COPY requirements.txt .
 RUN pip install --no-cache-dir --no-index --find-links /wheels -r requirements.txt || true
 
 # Copy application files
@@ -31,12 +33,15 @@ COPY --chown=proxy:proxy . /app
 USER proxy
 
 # Environment defaults (can be overridden at runtime)
-ENV OLLAMA_BASE_URL=http://ollama:11434
+# Note: OLLAMA_BASE_URL should point to a separately running Ollama instance
+ENV OLLAMA_BASE_URL=http://host.docker.internal:11434
 ENV PROXY_HOST=0.0.0.0
 ENV PROXY_PORT=8128
 ENV WEB_HOST=0.0.0.0
 ENV WEB_PORT=8028
-ENV CLASSIFIER_MODEL=qwen2.5:7b
+ENV CLASSIFIER_MODEL=qwen2.5:8b
+ENV REQUEST_TIMEOUT=120
+ENV FALLBACK_TIMEOUT=30
 
 EXPOSE 8128 8028
 

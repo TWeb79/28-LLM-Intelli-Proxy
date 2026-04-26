@@ -3,6 +3,7 @@ Decision engine: uses a configured LLM to choose the best model for a prompt.
 
 This module is intentionally conservative: if no decision model is configured
 it returns None so the caller may fallback to heuristics.
+Supports X-LLMProxy-Model header override for direct model selection.
 """
 import os
 import json
@@ -13,18 +14,61 @@ from providers.ollama_provider import OllamaProvider
 from services import registry as model_registry
 
 
+# Header name for model override
+MODEL_OVERRIDE_HEADER = "X-LLMProxy-Model"
+
+
 class DecisionEngine:
-    def __init__(self, decision_model: Optional[str] = None):
-        # model id like 'IntelliProxyLLM' or 'nvidia/llama-3...'
+    def __init__(self, decision_model: Optional[str] = None, fallback_model: Optional[str] = None):
         self.model_id = decision_model or os.getenv("DECISION_MODEL")
-        # default provider adapter to use if decision model provider cannot be resolved
+        self.fallback_model = fallback_model or os.getenv("FALLBACK_MODEL")
         self.default_provider = OllamaProvider()
 
-    async def select_model(self, user_prompt: str) -> Dict[str, Any]:
+    def get_model_from_override(self, headers: Optional[Dict[str, str]] = None) -> Optional[str]:
+        """Check for X-LLMProxy-Model header override.
+        
+        Args:
+            headers: Request headers dictionary
+            
+        Returns:
+            Model ID from header or None if not present
+        """
+        if headers is None:
+            return None
+        
+        # Check both lowercase and uppercase header names
+        model_override = headers.get(MODEL_OVERRIDE_HEADER) or headers.get(MODEL_OVERRIDE_HEADER.lower())
+        
+        if model_override:
+            # Validate the model exists in registry
+            models = model_registry.list_models()
+            for m in models:
+                if m.get("id") == model_override:
+                    return model_override
+            
+            # If not in registry, still allow it (might be a new model)
+            return model_override
+        
+        return None
+
+    async def select_model(self, user_prompt: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """Return a dict with keys: selected_model, reason, provider, latency_ms, token_count
 
-        If no decision model configured, returns selected_model=None and reason set.
+        If X-LLMProxy-Model header is present, returns that model directly (passthrough mode).
+        If no decision model configured, returns None and caller uses fallback.
         """
+        # Check for header override first
+        override_model = self.get_model_from_override(headers)
+        if override_model:
+            return {
+                "selected_model": override_model,
+                "reason": "model override via X-LLMProxy-Model header",
+                "provider": None,
+                "latency_ms": 0,
+                "token_count": 0,
+                "routing_mode": "passthrough"
+            }
+        
         if not self.model_id:
             return {"selected_model": None, "reason": "no decision model configured", "provider": None, "latency_ms": 0, "token_count": 0}
 
@@ -45,7 +89,7 @@ class DecisionEngine:
             "- image understanding or generation → prefer category: image or vision\n"
             "- prefer smaller/faster models for simple tasks\n"
             "- prefer larger models for complex or multi-step tasks\n"
-            "- if uncertain, use the configured fallback model\n"
+            f"- if uncertain, use the configured fallback model: {self.fallback_model or 'qwen2.5:8b'}\n"
         )
 
         prompt = system_prompt + "\nUser prompt:\n" + user_prompt
@@ -108,19 +152,9 @@ class DecisionEngine:
 
         routing_mode: 'auto' | 'passthrough' etc.
         """
-        db = model_registry.get_db()
-        with db() as conn:
-            cur = conn.cursor()
-            prompt_hash = json.dumps(prompt)[:200]
-            preview = prompt[:200]
-            try:
-                cur.execute(
-                    "INSERT INTO decision_backlog (prompt_hash, prompt_preview, selected_model, provider, reason, latency_ms, token_count, request_data, routing_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (prompt_hash, preview, selected_model, provider, reason, latency_ms, token_count, None, routing_mode)
-                )
-            except Exception:
-                # If column doesn't exist (older DB), fall back to insert without routing_mode
-                cur.execute(
-                    "INSERT INTO decision_backlog (prompt_hash, prompt_preview, selected_model, provider, reason, latency_ms, token_count, request_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (prompt_hash, preview, selected_model, provider, reason, latency_ms, token_count, None)
-                )
+        # Delegate persistence to the registry service to centralize DB access
+        try:
+            model_registry.persist_decision(prompt, selected_model, provider, reason, latency_ms, token_count=token_count, routing_mode=routing_mode)
+        except Exception:
+            # Best-effort persistence - ignore failures
+            pass

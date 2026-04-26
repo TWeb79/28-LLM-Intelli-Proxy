@@ -1,0 +1,34 @@
+# LLM IntelliProxy Configuration
+# Canonical configuration schema for Project 28
+
+proxy:
+  port: 8128
+  log_level: info
+  fallback_model: qwen2.5:7b
+
+decision:
+  model: ""  # Empty = use heuristic routing; set to a model ID for LLM-based routing
+  refresh_registry_on_startup: true
+
+providers:
+  - name: ollama
+    type: ollama
+    base_url: http://ollama:11434
+    refresh_interval_minutes: 15
+    enabled: true
+
+  - name: nvidia
+    type: openai_compatible
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key: ${NVIDIA_API_KEY}
+    model_catalog_url: https://build.nvidia.com/models
+    enabled: false  # Disabled by default, enable if NVIDIA_API_KEY is set
+
+storage:
+  type: sqlite
+  path: /data/llmproxy.db
+
+# Optional: Override default ports
+# dashboard:
+#   port: 8028
+#   host: 0.0.0.0

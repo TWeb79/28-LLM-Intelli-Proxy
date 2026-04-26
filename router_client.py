@@ -1,43 +1,38 @@
 #!/usr/bin/env python3
 """
-Ollama Compatible Client for IntelliProxy
-Standard Ollama client implementation with IntelliProxy as the default model.
-Connects to proxy on port 8128 instead of standard Ollama port.
+Ollama Compatible Client for IntelliProxy.
+
+Standard Ollama client implementation that connects to IntelliProxy
+for intelligent routing, or directly to Ollama bypassing the proxy.
 
 Routing Modes:
 1. DIRECT - Connect directly to Ollama (bypass IntelliProxy)
-2. PROXY - Use IntelliProxy intelligent routing (default)
-3. AIRLLM - Use AirLLM compression with Ollama
-4. AIRLLM_PROXY - Use AirLLM + IntelliProxy routing
+2. PROXY  - Use IntelliProxy intelligent routing (default)
 """
 
 import requests
 import logging
 import json
-from typing import Optional, Dict, List, Iterator, Union, overload, Literal
-from datetime import datetime
+from typing import Optional, Dict, List
 from enum import Enum
 
 
 class RoutingMode(Enum):
     """Routing mode for the client"""
-    DIRECT = "direct"           # Direct to Ollama
-    PROXY = "proxy"             # Via IntelliProxy
-    AIRLLM = "airllm"           # AirLLM compression
-    AIRLLM_PROXY = "airllm_proxy"  # AirLLM + Proxy
+    DIRECT = "direct"   # Direct to Ollama
+    PROXY = "proxy"     # Via IntelliProxy
 
 
 class OllamaClient:
     """
     Ollama-compatible client for IntelliProxy.
-    Works exactly like standard Ollama client, but uses IntelliProxyLLM by default.
+    Works exactly like standard Ollama client, but uses IntelliProxy by default.
     """
-    
-    # Default endpoints (match repository defaults)
-    OLLAMA_DIRECT = "http://localhost:8928"  # Direct Ollama (docker port 8928)
-    PROXY_URL = "http://localhost:8128"       # IntelliProxy API
-    AIRLLM_URL = "http://localhost:8128"       # AirLLM (if proxied)
-    
+
+    # Default endpoints
+    OLLAMA_DIRECT = "http://localhost:11434"  # Direct Ollama
+    PROXY_URL = "http://localhost:8128"        # IntelliProxy API
+
     def __init__(
         self,
         proxy_url: str = PROXY_URL,
@@ -46,25 +41,22 @@ class OllamaClient:
     ):
         """
         Initialize the Ollama client.
-        
+
         Args:
-            proxy_url: URL of the IntelliProxy (default: http://localhost:9998)
-            routing_mode: How to route requests (direct, proxy, airllm, airllm_proxy)
+            proxy_url: URL of the IntelliProxy (default: http://localhost:8128)
+            routing_mode: How to route requests (direct or proxy)
             timeout: Request timeout in seconds (default: 600)
         """
         self.proxy_url = (proxy_url or self.PROXY_URL).rstrip("/")
         self.routing_mode = routing_mode
         self.session = requests.Session()
         self.timeout = timeout
-    
+
     def _get_endpoint(self) -> str:
         """Get the appropriate endpoint based on routing mode"""
         if self.routing_mode == RoutingMode.DIRECT:
             return self.OLLAMA_DIRECT
-        elif self.routing_mode in (RoutingMode.AIRLLM, RoutingMode.AIRLLM_PROXY):
-            return self.AIRLLM_URL
-        else:
-            return self.proxy_url
+        return self.proxy_url
     
     def set_routing_mode(self, mode: RoutingMode):
         """Change the routing mode at runtime"""
@@ -391,7 +383,6 @@ def quick_ask(prompt: str, mode: RoutingMode = RoutingMode.PROXY):
     Quick CLI usage: 
         python router_client.py "Your question"            # Via proxy (default)
         python router_client.py direct "Your question"     # Direct to Ollama
-        python router_client.py airllm "Your question"    # Via AirLLM
     
     Args:
         prompt: The question to ask
@@ -416,7 +407,7 @@ if __name__ == "__main__":
             prompt = " ".join(sys.argv[1:])
         
         if not prompt:
-            logging.getLogger(__name__).error("Usage: python router_client.py [direct|proxy|airllm|airllm_proxy] \"Your question\"")
+            logging.getLogger(__name__).error("Usage: python router_client.py [direct|proxy] \"Your question\"")
             sys.exit(1)
             
         quick_ask(prompt, mode)
