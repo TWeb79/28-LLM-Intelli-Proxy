@@ -3,16 +3,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: runtime
     image: llmproxy:latest
     container_name: llmproxy
     restart: unless-stopped
+
     ports:
       - "${PROXY_PORT:-8128}:8128"
       - "${DASHBOARD_PORT:-8028}:8028"
+
     volumes:
       - proxy_data:/data
       - ./config.yaml:/app/config.yaml:ro
+
     environment:
       PROXY_PORT: ${PROXY_PORT:-8128}
       DASHBOARD_PORT: ${DASHBOARD_PORT:-8028}
@@ -28,13 +30,16 @@ services:
       CLASSIFIER_MODEL: qwen2.5:8b
       REQUEST_TIMEOUT: 120
       FALLBACK_TIMEOUT: 30
+
     networks:
       - llmproxy_net
+
     logging:
       driver: "json-file"
       options:
         max-size: "50m"
         max-file: "5"
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8128/health"]
       interval: 30s
