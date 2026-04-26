@@ -24,11 +24,6 @@ import threading
 from typing import Optional, Dict, List, Any, Union
 from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
-import logging
-from services import registry as model_registry
-from services.logging_config import setup_logging
-from providers.ollama_provider import OllamaProvider
-from services.decision_engine import DecisionEngine
 from enum import Enum
 from pathlib import Path
 
@@ -37,7 +32,7 @@ import sqlite3
 from contextlib import contextmanager
 
 # FastAPI
-from fastapi import FastAPI, HTTPException, Header, Request, BackgroundTasks, Response
+from fastapi import FastAPI, HTTPException, Header, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -121,9 +116,6 @@ CONFIG = load_config()
 data_dir = os.path.dirname(CONFIG["storage"]["path"])
 os.makedirs(data_dir, exist_ok=True)
 
-# Configure structured logging
-setup_logging(CONFIG.get('proxy', {}).get('log_level', 'info'))
-
 # ============================================================================
 # DATABASE SETUP - Unified Model Registry
 # ============================================================================
@@ -204,20 +196,6 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_metrics_model ON request_metrics(model_id)")
         
         logging.info("Database initialized successfully")
-        # Add routing_mode column to decision_backlog if missing (additive migration)
-        try:
-            cur = conn.cursor()
-            cur.execute("PRAGMA table_info(decision_backlog)")
-            cols = [r[1] for r in cur.fetchall()]
-            if 'routing_mode' not in cols:
-                cur.execute("ALTER TABLE decision_backlog ADD COLUMN routing_mode TEXT DEFAULT 'auto'")
-        except Exception:
-            pass
-
-
-def ensure_registry_tables():
-    # Use existing init_db to ensure tables exist; this keeps DB creation additive
-    init_db()
 
 # ============================================================================
 # PROVIDER INTERFACE
@@ -469,13 +447,13 @@ class IntelligentRouter:
                 model_score_cache.compute_scores(MODEL_ATTRIBUTES)
                 
                 self._categorize_models()
-                logging.info(f"✅ Discovered {len(self.available_models)} models")
+                print(f"✅ Discovered {len(self.available_models)} models")
                 return self.available_models
             else:
                 raise Exception(f"Ollama error: HTTP {response.status_code}")
         
         except Exception as e:
-            logging.warning(f"❌ Error discovering models: {e}")
+            print(f"❌ Error discovering models: {e}")
             return {}
     
     def _categorize_models(self):
@@ -579,59 +557,26 @@ class IntelligentRouter:
         
         return min(max(complexity, 1), 10)
     
-    async def route_and_execute(self, prompt: str, stream: bool = False, requested_model: Optional[str] = None, override_model: Optional[str] = None) -> Dict:
-        """Route and execute. Decision flow:
-        - If override_model header is provided, use it directly.
-        - Else if requested_model is provided and not equal to IntelliProxyLLM, use it.
-        - Else consult DECISION_ENGINE (if configured) to pick a model from the registry.
-        - Fall back to configured fallback model.
-
-        Returns the execution result dict.
-        """
+    async def route_and_execute(self, prompt: str, stream: bool = False) -> Dict:
+        """Route and execute - through AirLLM if enabled, otherwise direct to Ollama"""
         start_time = time.time()
-
-        # If explicit override header provided, bypass routing
-        if override_model:
-            selected_model = override_model
-            classification = await self.classify_task(prompt)
-        elif requested_model and requested_model != "IntelliProxyLLM":
-            selected_model = requested_model
-            classification = await self.classify_task(prompt)
-        else:
-            # Use decision engine when available
-            decision_info = await DECISION_ENGINE.select_model(prompt)
-            selected_model = decision_info.get("selected_model")
-            reason = decision_info.get("reason")
-            latency_ms = decision_info.get("latency_ms", 0)
-            provider = decision_info.get("provider")
-
-            # Validate selected_model against registry; if invalid, use fallback
-            registry_models = {m["id"]: m for m in model_registry.list_models()}
-            if not selected_model or selected_model not in registry_models:
-                selected_model = CONFIG.get("proxy", {}).get("fallback_model")
-                # persist a decision indicating fallback used
-                try:
-                    DECISION_ENGINE.persist_decision(prompt, selected_model or "", provider, reason or "fallback used", latency_ms)
-                except Exception:
-                    pass
-
-            classification = await self.classify_task(prompt)
-
+        
+        # Classify
+        classification = await self.classify_task(prompt)
+        
+        # Select model
+        complexity = self._analyze_prompt_complexity(prompt)
+        selected_model = self._select_best_model(classification, complexity)
+        
         if not selected_model:
             raise HTTPException(status_code=503, detail="No models available")
-
+        
         # Execute through AirLLM if enabled, otherwise direct to Ollama
         if AIRLLM_ENABLED:
             result = await self._execute_on_airllm(selected_model, prompt, stream, start_time, classification)
         else:
             result = await self._execute_direct(selected_model, prompt, stream, start_time, classification)
-
-        # Persist the decision asynchronously (best-effort)
-        try:
-            DECISION_ENGINE.persist_decision(prompt, selected_model, None, "", int((time.time() - start_time) * 1000))
-        except Exception:
-            pass
-
+        
         return result
     
     async def _execute_direct(self, model: str, prompt: str, stream: bool,
@@ -688,7 +633,7 @@ class IntelligentRouter:
                 continue
         
         # All models failed
-        logging.error(f"❌ Direct Ollama error: {last_error}")
+        print(f"❌ Direct Ollama error: {last_error}")
         raise HTTPException(status_code=500, detail=f"All models failed: {last_error}")
     
     async def _execute_on_airllm(self, model: str, prompt: str, stream: bool, 
@@ -741,18 +686,12 @@ class IntelligentRouter:
                     json={"model": model, "prompt": "warmup", "stream": False},
                     timeout=30
                 )
-                logging.info(f"🔥 Warmed up model: {model}")
+                print(f"🔥 Warmed up model: {model}")
             except:
                 pass  # Ignore failures
 
 # Initialize router
 router = IntelligentRouter(OLLAMA_TARGET["base_url"], CLASSIFIER_MODEL)
-
-# Initialize provider instances
-OLLAMA_PROVIDER = OllamaProvider(name="ollama", base_url=OLLAMA_TARGET.get("base_url"))
-
-# Decision engine (configurable model)
-DECISION_ENGINE = DecisionEngine(CONFIG.get("decision", {}).get("model"))
 
 # ============================================================================
 # FASTAPI SETUP
@@ -785,47 +724,23 @@ web_app.mount("/static", StaticFiles(directory=static_dir), name="static")
 @api_app.on_event("startup")
 async def startup_event():
     """Initialize router on startup"""
-    logging.info("\n" + "="*70)
-    logging.info("🚀 Intelligent Router (Simplified) - Starting...")
-    logging.info("="*70)
-    logging.info(f"📍 Ollama: {OLLAMA_TARGET['base_url']}")
+    print("\n" + "="*70)
+    print("🚀 Intelligent Router (Simplified) - Starting...")
+    print("="*70)
+    print(f"📍 Ollama: {OLLAMA_TARGET['base_url']}")
     if AIRLLM_ENABLED:
-        logging.info(f"🔗 AirLLM: {AIRLLM_CONFIG['base_url']} (ENABLED)")
+        print(f"🔗 AirLLM: {AIRLLM_CONFIG['base_url']} (ENABLED)")
     else:
-        logging.info(f"🔗 AirLLM: {AIRLLM_CONFIG['base_url']} (DISABLED - using direct Ollama)")
-    logging.info(f"🌐 Router: http://{PROXY_HOST}:{PROXY_PORT}")
+        print(f"🔗 AirLLM: {AIRLLM_CONFIG['base_url']} (DISABLED - using direct Ollama)")
+    print(f"🌐 Router: http://{PROXY_HOST}:{PROXY_PORT}")
     
-    # Ensure DB schema exists
-    ensure_registry_tables()
-
-    # Discover models via provider and upsert into registry
-    try:
-        discovered = await OLLAMA_PROVIDER.list_models()
-        for m in discovered:
-            # upsert into model_registry
-            try:
-                model_registry.upsert_model(m.get("provider"), m.get("id"), m.get("source_url"), category=m.get("category"), description=m.get("description"), context_window=m.get("context_window"))
-            except Exception:
-                pass
-        # Run async assessments for newly discovered models
-        from services.assessor import Assessor
-        assessor = Assessor(CONFIG.get("decision", {}).get("model"))
-        for m in discovered:
-            try:
-                # Check assessed flag in DB
-                rows = [r for r in model_registry.list_models() if r.get("id") == m.get("id") and r.get("provider") == m.get("provider")]
-                if rows and not rows[0].get("assessed"):
-                    # schedule assess_model (best-effort, fire-and-forget)
-                    asyncio.create_task(assessor.assess_model(m.get("provider"), m.get("id")))
-            except Exception:
-                pass
-        # Also populate the in-memory router list to preserve prior behaviour
-        await router.discover_models()
-        await router.warm_up_models()
-    except Exception as e:
-        logging.warning(f"Model discovery failed on startup: {e}")
+    # Discover models
+    await router.discover_models()
     
-        logging.info("\n" + "="*70 + "\n")
+    # Warm up common models
+    await router.warm_up_models()
+    
+    print("="*70 + "\n")
 
 @api_app.get("/")
 async def root():
@@ -840,48 +755,12 @@ async def root():
 
 @api_app.get("/models")
 async def list_models():
-    """List all available models. Hide the configured decision model from external clients."""
-    models = dict(router.available_models)
-    decision_model = CONFIG.get("decision", {}).get("model")
-    if decision_model and decision_model in models:
-        models.pop(decision_model, None)
-
+    """List all available models"""
     return {
-        "total": len(models),
-        "models": models,
+        "total": len(router.available_models),
+        "models": router.available_models,
         "categories": router.model_categories
     }
-
-
-@api_app.get("/v1/models")
-async def v1_models():
-    """OpenAI-compatible /v1/models endpoint returning virtual auto-model + passthrough models.
-
-    Returns object:list with intelliproxy-auto first and enabled registry models afterwards.
-    """
-    registry_models = model_registry.list_models()
-    data = []
-    # Virtual AutoModel first
-    data.append({
-        "id": "intelliproxy-auto",
-        "object": "model",
-        "created": int(time.time()),
-        "owned_by": "intelliproxy",
-        "description": "Automatically routes your request to the most suitable model based on task analysis."
-    })
-
-    for m in registry_models:
-        if not m.get("enabled", True):
-            continue
-        data.append({
-            "id": m.get("id"),
-            "object": "model",
-            "created": int(time.mktime(datetime.fromisoformat(m.get("last_seen")).timetuple())) if m.get("last_seen") else int(time.time()),
-            "owned_by": m.get("provider"),
-            "description": m.get("description") or ""
-        })
-
-    return {"object": "list", "data": data}
 
 @api_app.post("/task")
 async def process_task(request: TaskRequest):
@@ -892,116 +771,33 @@ async def process_task(request: TaskRequest):
 @api_app.post("/api/generate")
 async def generate(request: GenerateRequest):
     """Ollama-compatible generate endpoint - always routes through IntelliRouter"""
-    model = request.model or "intelliproxy-auto"
-    prompt = request.prompt or ""
-
-    # Lookup registry for passthrough models
-    registry = {m['id']: m for m in model_registry.list_models()}
-
-    # Helper to forward to Ollama provider (only provider currently implemented)
-    async def forward_to_provider(provider_name: str, model_id: str, payload: dict, endpoint: str = "/api/generate"):
-        if provider_name == 'ollama':
-            return await OLLAMA_PROVIDER.forward_request(model_id, payload, stream=request.stream, endpoint=endpoint)
-        raise HTTPException(status_code=502, detail=f"Provider adapter for '{provider_name}' not implemented")
-
-    # Virtual auto model: run decision engine and forward
-    if model == 'intelliproxy-auto':
-        decision = await DECISION_ENGINE.select_model(prompt)
-        selected = decision.get('selected_model')
-        provider_name = decision.get('provider') or 'ollama'
-        reason = decision.get('reason')
-        latency_ms = decision.get('latency_ms', 0)
-
-        if not selected:
-            # fallback
-            selected = CONFIG.get('proxy', {}).get('fallback_model')
-
-        # Forward to provider
-        resp = await forward_to_provider(provider_name, selected, {"prompt": prompt}, endpoint="/api/generate")
-
-        # Persist decision
-        try:
-            DECISION_ENGINE.persist_decision(prompt, selected, provider_name, reason or '', latency_ms, routing_mode='auto')
-        except Exception:
-            pass
-
-        # Add transparency headers
-        headers = {"X-IntelliProxy-Model": selected, "X-IntelliProxy-Provider": provider_name}
-
-        return Response(content=json.dumps(resp), media_type="application/json", headers=headers)
-
-    # Passthrough model: must exist and be enabled
-    if model in registry:
-        entry = registry[model]
-        if not entry.get('enabled', True):
-            raise HTTPException(status_code=404, detail="Model not enabled")
-
-        provider_name = entry.get('provider')
-        # Forward directly to provider
-        resp = await forward_to_provider(provider_name, model, {"prompt": prompt}, endpoint="/api/generate")
-
-        # Log passthrough to decision backlog
-        try:
-            DECISION_ENGINE.persist_decision(prompt, model, provider_name, 'passthrough', 0, routing_mode='passthrough')
-        except Exception:
-            pass
-
-        return resp
-
-    # Unknown model
-    raise HTTPException(status_code=404, detail="Model not found in IntelliProxy registry")
+    result = await router.route_and_execute(
+        request.prompt or "",
+        request.stream
+    )
+    
+    return {
+        "model": result["model_used"],
+        "response": result["result"],
+        "done": True
+    }
 
 @api_app.post("/api/chat")
 async def chat(request: ChatRequest):
     """Ollama-compatible chat endpoint - always routes through IntelliRouter"""
     # Combine messages into single prompt
     prompt = "\n".join([f"{msg.role}: {msg.content}" for msg in request.messages])
-    model = request.model or "intelliproxy-auto"
-
-    registry = {m['id']: m for m in model_registry.list_models()}
-
-    async def forward_to_provider(provider_name: str, model_id: str, payload: dict, endpoint: str = "/api/chat"):
-        if provider_name == 'ollama':
-            return await OLLAMA_PROVIDER.forward_request(model_id, payload, stream=request.stream, endpoint=endpoint)
-        raise HTTPException(status_code=502, detail=f"Provider adapter for '{provider_name}' not implemented")
-
-    if model == 'intelliproxy-auto':
-        decision = await DECISION_ENGINE.select_model(prompt)
-        selected = decision.get('selected_model')
-        provider_name = decision.get('provider') or 'ollama'
-        reason = decision.get('reason')
-        latency_ms = decision.get('latency_ms', 0)
-
-        if not selected:
-            selected = CONFIG.get('proxy', {}).get('fallback_model')
-
-        resp = await forward_to_provider(provider_name, selected, {"messages": [m.dict() for m in request.messages]}, endpoint="/api/chat")
-
-        try:
-            DECISION_ENGINE.persist_decision(prompt, selected, provider_name, reason or '', latency_ms, routing_mode='auto')
-        except Exception:
-            pass
-
-        headers = {"X-IntelliProxy-Model": selected, "X-IntelliProxy-Provider": provider_name}
-
-        return Response(content=json.dumps(resp), media_type="application/json", headers=headers)
-
-    if model in registry:
-        entry = registry[model]
-        if not entry.get('enabled', True):
-            raise HTTPException(status_code=404, detail="Model not enabled")
-
-        provider_name = entry.get('provider')
-        resp = await forward_to_provider(provider_name, model, {"messages": [m.dict() for m in request.messages]}, endpoint="/api/chat")
-
-        try:
-            DECISION_ENGINE.persist_decision(prompt, model, provider_name, 'passthrough', 0, routing_mode='passthrough')
-        except Exception:
-            pass
-
-        return resp
-
-    raise HTTPException(status_code=404, detail="Model not found in IntelliProxy registry")
+    
+    result = await router.route_and_execute(prompt, request.stream)
+    
+    return {
+        "model": result["model_used"],
+        "message": {
+            "role": "assistant",
+            "content": result["result"]
+        },
+        "done": True
+    }
 
 @api_app.get("/stats")
 async def get_stats():
@@ -1097,8 +893,8 @@ async def performance_test(request: PerformanceTestRequest):
         except Exception as e:
             import traceback
             error_msg = f"{type(e).__name__}: {str(e)}"
-            logging.error(f"[PERF TEST ERROR] {error_msg}")
-            logging.debug(f"[PERF TEST TRACE] {traceback.format_exc()}")
+            print(f"[PERF TEST ERROR] {error_msg}")
+            print(f"[PERF TEST TRACE] {traceback.format_exc()}")
             results.append({
                 "mode": "intelliproxy",
                 "label": "IntelliProxy",
@@ -1429,7 +1225,7 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "api":
         run_api_server()
     else:
-        logging.info("\n🚀 Starting Intelligent Router (Simplified)...\n")
+        print("\n🚀 Starting Intelligent Router (Simplified)...\n")
         
         api_thread = threading.Thread(target=run_api_server, daemon=True)
         web_thread = threading.Thread(target=run_web_server, daemon=True)
@@ -1440,5 +1236,5 @@ if __name__ == "__main__":
         try:
             api_thread.join()
         except KeyboardInterrupt:
-            logging.info("\n\n👋 Shutting down...")
+            print("\n\n👋 Shutting down...")
             sys.exit(0)

@@ -190,7 +190,7 @@ docker logs ollama-router
 
 ### 4. Open Dashboard
 
-Open http://localhost:9999 in your browser.
+Open http://localhost:8028 in your browser (dashboard port is 8028 by default in this repo).
 
 ## Configuration
 

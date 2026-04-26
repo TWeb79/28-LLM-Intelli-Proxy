@@ -1,35 +1,9 @@
 version: '3.8'
 
 services:
-  # Ollama service (internal to docker network on port 11434)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama-server-28
-    ports:
-      - "8928:11434"  # External port 8928 → Internal 11434 (LLM per RULES_ports: 89xx)
-    volumes:
-      - ollama-data:/root/.ollama
-      - D:/AI.OllamaModels:/import-models:ro
-    environment:
-      - OLLAMA_HOST=0.0.0.0:11434  # Internal port
-    restart: unless-stopped
-    networks:
-      - ollama-network
-    entrypoint: ["sh", "-c"]
-    command:
-      - |
-        echo "Setting up Ollama models in background..."
-        (
-          if [ -d "/import-models/blobs" ]; then
-            cp -rn /import-models/blobs/* /root/.ollama/models/blobs/ 2>/dev/null || true
-          fi
-          if [ -d "/import-models/manifests" ]; then
-            cp -rn /import-models/manifests/* /root/.ollama/models/manifests/ 2>/dev/null || true
-          fi
-          echo "Model setup complete."
-        ) &
-        echo "Starting Ollama..."
-        exec /bin/ollama serve
+  # Note: Ollama is NOT provided in this docker-compose. The proxy connects to an
+  # external Ollama instance. Set OLLAMA_BASE_URL in .env or the service environment
+  # to point to your existing Ollama (for example: http://host.docker.internal:8928).
 
   # AirLLM is not available as a Docker image.
   # To use AirLLM compression, install it separately and configure manually.
@@ -108,9 +82,8 @@ services:
     
     # Note: AirLLM service is not available as Docker image
     # Router will start without AirLLM support
-    depends_on:
-      ollama:
-        condition: service_started
+    # No local Ollama service is started by this compose file. Configure
+    # OLLAMA_BASE_URL to point to your existing Ollama instance.
     
     restart: unless-stopped
     

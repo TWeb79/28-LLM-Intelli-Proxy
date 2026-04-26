@@ -12,6 +12,7 @@ Routing Modes:
 """
 
 import requests
+import logging
 import json
 from typing import Optional, Dict, List, Iterator, Union, overload, Literal
 from datetime import datetime
@@ -32,10 +33,10 @@ class OllamaClient:
     Works exactly like standard Ollama client, but uses IntelliProxyLLM by default.
     """
     
-    # Default endpoints
-    OLLAMA_DIRECT = "http://localhost:8928"  # Direct Ollama (docker port 8928 per RULES_ports: 89xx)
+    # Default endpoints (match repository defaults)
+    OLLAMA_DIRECT = "http://localhost:8928"  # Direct Ollama (docker port 8928)
     PROXY_URL = "http://localhost:8128"       # IntelliProxy API
-    AIRLLM_URL = "http://localhost:8128"       # AirLLM
+    AIRLLM_URL = "http://localhost:8128"       # AirLLM (if proxied)
     
     def __init__(
         self,
@@ -68,7 +69,7 @@ class OllamaClient:
     def set_routing_mode(self, mode: RoutingMode):
         """Change the routing mode at runtime"""
         self.routing_mode = mode
-        print(f"Routing mode set to: {mode.value}")
+        logging.getLogger(__name__).info("Routing mode set", extra={"mode": mode.value})
     
     # =========================================================================
     # Standard Ollama API Methods
@@ -326,25 +327,19 @@ class OllamaClient:
     def print_models(self):
         """Pretty print available models."""
         data = self.list_models()
-        
-        print("\n" + "="*70)
-        print("📦 AVAILABLE MODELS")
-        print("="*70)
-        
+        logging.getLogger(__name__).info("AVAILABLE MODELS:\n" + "="*70)
+
         for model in data.get("models", []):
             name = model.get("name", "unknown")
             size_gb = model.get("size", 0) / (1024**3)
             desc = model.get("description", "")
-            
+
             if name == "IntelliProxyLLM":
-                print(f"\n🤖 {name}")
-                print(f"   → {desc}")
+                logging.getLogger(__name__).info(f"IntelliProxy model: {name}", extra={"description": desc})
             else:
-                print(f"\n📄 {name} ({size_gb:.1f} GB)")
-                if model.get("speed"):
-                    print(f"   → Speed: {model['speed']}/10, Complexity: {model.get('complexity', '?')}/10")
-        
-        print("\n" + "="*70 + "\n")
+                logging.getLogger(__name__).info(f"Model: {name}", extra={"size_gb": size_gb, "desc": desc, "speed": model.get("speed")})
+
+        logging.getLogger(__name__).info("\n" + "="*70 + "\n")
 
 
 # =============================================================================
@@ -354,43 +349,41 @@ class OllamaClient:
 def example_usage():
     """Example: Using the Ollama-compatible client."""
     
-    print("\n🚀 Ollama Compatible Client for IntelliProxy\n")
+    logging.getLogger(__name__).info("\n🚀 Ollama Compatible Client for IntelliProxy\n")
     
     # Create client (connects to proxy on port 9998)
     client = OllamaClient()
     
     # 1. List models
-    print("1️⃣  Listing models...")
+    logging.getLogger(__name__).info("1️⃣  Listing models...")
     client.print_models()
     
     # 2. Simple text generation with IntelliProxyLLM
-    print("2️⃣  Text generation with IntelliProxyLLM (intelligent routing)...\n")
+    logging.getLogger(__name__).info("2️⃣  Text generation with IntelliProxyLLM (intelligent routing)...\n")
     response = client.ask("What is Python?")
-    print(f"Response: {response}\n")
+    logging.getLogger(__name__).info(f"Response: {response}\n")
     
     # 3. Chat with IntelliProxyLLM
-    print("3️⃣  Chat with IntelliProxyLLM...\n")
+    logging.getLogger(__name__).info("3️⃣  Chat with IntelliProxyLLM...\n")
     history = []
     response, history = client.chat_ask("Hello! How are you?", history=history)
-    print(f"User: Hello! How are you?")
-    print(f"Assistant: {response}\n")
+    logging.getLogger(__name__).info(f"User: Hello! How are you?")
+    logging.getLogger(__name__).info(f"Assistant: {response}\n")
     
     response, history = client.chat_ask("What is 2+2?", history=history)
-    print(f"User: What is 2+2?")
-    print(f"Assistant: {response}\n")
+    logging.getLogger(__name__).info(f"User: What is 2+2?")
+    logging.getLogger(__name__).info(f"Assistant: {response}\n")
     
     # 4. Using specific model directly
-    print("4️⃣  Using specific model directly...\n")
+    logging.getLogger(__name__).info("4️⃣  Using specific model directly...\n")
     result = client.generate("Explain AI in one sentence", model="qwen2.5:7b")
-    print(f"Direct model (qwen2.5:7b): {result.get('response')}\n")
+    logging.getLogger(__name__).info(f"Direct model (qwen2.5:7b): {result.get('response')}\n")
     
     # 5. Streaming response
-    print("5️⃣  Streaming response...\n")
-    print("Streaming: ", end="", flush=True)
+    logging.getLogger(__name__).info("5️⃣  Streaming response...\n")
     for chunk in client.generate("Count to 5", stream=True):
         data = json.loads(chunk)
-        print(data.get("response", ""), end="", flush=True)
-    print("\n")
+        logging.getLogger(__name__).info(data.get("response", ""))
 
 
 def quick_ask(prompt: str, mode: RoutingMode = RoutingMode.PROXY):
@@ -405,9 +398,9 @@ def quick_ask(prompt: str, mode: RoutingMode = RoutingMode.PROXY):
         mode: Routing mode to use
     """
     client = OllamaClient(routing_mode=mode)
-    print(f"\n[{mode.value.upper()}] Asking: {prompt[:50]}...")
+    logging.getLogger(__name__).info(f"\n[{mode.value.upper()}] Asking: {prompt[:50]}...")
     response = client.ask(prompt)
-    print(response)
+    logging.getLogger(__name__).info(response)
 
 
 if __name__ == "__main__":
@@ -423,7 +416,7 @@ if __name__ == "__main__":
             prompt = " ".join(sys.argv[1:])
         
         if not prompt:
-            print("Usage: python router_client.py [direct|proxy|airllm|airllm_proxy] \"Your question\"")
+            logging.getLogger(__name__).error("Usage: python router_client.py [direct|proxy|airllm|airllm_proxy] \"Your question\"")
             sys.exit(1)
             
         quick_ask(prompt, mode)

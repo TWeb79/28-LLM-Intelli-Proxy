@@ -403,9 +403,21 @@ Avoid print() in production code.
 
 ---
 
+# Testing Standards
+
+Code must be tested, follow the following steps:
+1. investigate the project and code
+2. describe the functionality of the project to know the sequence of tasks
+3. create a test plan based on all features in the code
+4. follow the test plan
+5. update the test plan and add a oneliner comment per task
+
+---
+
+
 # Final Rule
 
-Code must be understandable without verbal explanation.
+Code must be tested, run and understandable without verbal explanation.
 
 If documentation is required to understand basic flow:
 
