@@ -138,6 +138,47 @@ async def v1_models():
     return {"object": "list", "data": data}
 
 
+async def get_all_models():
+    """Get all models from all providers including the intelliproxy-auto model."""
+    from providers.ollama_provider import OllamaProvider
+    from providers.nvidia_provider import NvidiaProvider
+    
+    all_models = []
+    
+    # Add the intelliproxy-auto model (fake model for decision routing)
+    all_models.append({
+        "id": "intelliproxy-auto",
+        "object": "model",
+        "created": int(time.time()),
+        "owned_by": "intelliproxy",
+        "description": "Automatically routes your request to the most suitable model based on task analysis.",
+        "provider": "intelliproxy",
+        "category": "routing",
+        "enabled": True
+    })
+    
+    # Get models from registry (includes all providers)
+    registry_models = model_registry.list_models()
+    for m in registry_models:
+        if m.get("enabled", True):
+            all_models.append({
+                "id": m.get("id"),
+                "object": "model",
+                "created": int(time.mktime(datetime.fromisoformat(m["last_seen"]).timetuple())) if m.get("last_seen") else int(time.time()),
+                "owned_by": m.get("provider"),
+                "description": m.get("description") or "",
+                "provider": m.get("provider"),
+                "category": m.get("category", "general"),
+                "enabled": True
+            })
+    
+    return {
+        "object": "list",
+        "data": all_models,
+        "total": len(all_models)
+    }
+
+
 async def process_task(request):
     return await router_service.route_and_execute(request.prompt, request.stream)
 
@@ -439,4 +480,3 @@ def initialize(
     _ollama_provider = ollama_provider
     _proxy_port = proxy_port
     _db_path = db_path
-

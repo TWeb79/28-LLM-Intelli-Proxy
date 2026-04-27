@@ -770,21 +770,35 @@
             const apiKey = document.getElementById('nvidia-api-key').value;
             const statusEl = document.getElementById('nvidia-status');
 
+            if (!apiKey.trim()) {
+                statusEl.textContent = '⚠️ Please enter an API key';
+                statusEl.style.color = 'var(--accent-yellow)';
+                return;
+            }
+
+            statusEl.textContent = '⏳ Testing NVIDIA configuration...';
+            statusEl.style.color = 'var(--text-secondary)';
+
             try {
                 const res = await fetch(`${API_URL}/config/nvidia`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ api_key: apiKey })
                 });
+
+                const data = await res.json();
+
                 if (res.ok) {
-                    statusEl.textContent = '✅ NVIDIA configuration saved';
+                    statusEl.textContent = `✅ ${data.message || 'NVIDIA configuration saved'}`;
                     statusEl.style.color = 'var(--accent-green)';
                     setTimeout(loadAllData, 1000);
                 } else {
-                    throw new Error('Failed to save');
+                    const error = data.detail || 'Failed to save configuration';
+                    statusEl.textContent = `❌ ${error}`;
+                    statusEl.style.color = 'var(--accent-red)';
                 }
             } catch (e) {
-                statusEl.textContent = '❌ Error saving configuration';
+                statusEl.textContent = '❌ Network error. Please check your connection.';
                 statusEl.style.color = 'var(--accent-red)';
             }
         }
@@ -841,13 +855,31 @@
             btn.innerHTML = '<span class="spinner"></span> Refreshing...';
 
             try {
-                await fetch(`${API_URL}/api/registry/refresh`, { method: 'POST' });
+                const response = await fetch(`${API_URL}/api/registry/refresh`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.status === 'completed') {
+                    console.log('Refresh completed:', data);
+                    // Display detailed results
+                    const totalModels = data.total_models || 0;
+                    const ollamaModels = data.providers?.ollama?.models || 0;
+                    const nvidiaModels = data.providers?.nvidia?.models || 0;
+                    
+                    alert(`✅ Refresh completed!\n\n` +
+                          `Total models: ${totalModels}\n` +
+                          `Ollama: ${ollamaModels} models\n` +
+                          `NVIDIA: ${nvidiaModels} models\n` +
+                          `All models are now available for routing.`);
+                }
+                
                 setTimeout(() => {
                     loadAllData();
                     btn.disabled = false;
                     btn.textContent = '🔄 Refresh';
                 }, 2000);
             } catch (e) {
+                console.error('Refresh failed:', e);
+                alert('❌ Failed to refresh models. Check console for details.');
                 btn.disabled = false;
                 btn.textContent = '🔄 Refresh';
             }
