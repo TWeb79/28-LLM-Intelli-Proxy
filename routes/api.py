@@ -536,7 +536,7 @@ async def set_ollama_target(request: dict):
     return {"status": "ok", "base_url": _ollama_target['base_url']}
 
 async def set_fallbacks(request: dict):
-    from services.fallbacks import set_fallbacks as set_fb, set_timeout as set_tmo
+    from services.fallbacks import set_fallbacks as set_fb, set_timeout as set_tmo, get_fallbacks as get_fb
     fallbacks = request.get('fallbacks', {})
     if not isinstance(fallbacks, dict):
         fallbacks = {}
@@ -545,7 +545,8 @@ async def set_fallbacks(request: dict):
     set_fb(fallbacks)
     if 'timeout' in request:
         set_tmo(request['timeout'])
-    return {"status": "ok", "fallbacks": get_fallbacks(), "timeout": int(os.getenv('FALLBACK_TIMEOUT', '30'))}
+    current = get_fb()
+    return {"status": "ok", "fallbacks": current, "timeout": int(os.getenv('FALLBACK_TIMEOUT', '30'))}
 
 async def get_requests():
     return {"recent": [], "total": _router.stats.total_requests if _router else 0}

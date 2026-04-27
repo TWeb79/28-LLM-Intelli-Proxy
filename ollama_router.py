@@ -187,7 +187,7 @@ from routes.api import (
 )
 from routes.web import (
     dashboard as web_dashboard, web_stats as web_stats_handler, web_health as web_health_handler,
-    get_fallbacks_config as web_fallbacks, initialize as initialize_web
+    get_fallbacks_config as web_fallbacks, get_ollama_config, get_nvidia_config, initialize as initialize_web
 )
 from routes.registry import set_nvidia_config, get_nvidia_status
 
@@ -206,15 +206,15 @@ api_app.get("/health")(health_check)
 async def classify(prompt: str):
     return await classify_only(prompt)
 
-    api_app.get("/config")(get_config_handler)
-    api_app.get("/config/fallbacks")(get_fallbacks_handler)
-    api_app.post("/config/ollama")(set_ollama_handler)
-    api_app.get("/config/ollama")(get_ollama_config)
-    api_app.post("/config/fallbacks")(set_fallbacks_handler)
-    api_app.post("/config/nvidia")(set_nvidia_config)
-    api_app.get("/config/nvidia")(get_nvidia_config)
-    api_app.get("/requests")(get_requests)
-    api_app.post("/requests/clear")(clear_requests)
+api_app.get("/api/config")(get_config_handler)
+api_app.get("/api/config/fallbacks")(get_fallbacks_handler)
+api_app.post("/api/config/ollama")(set_ollama_handler)
+api_app.get("/api/config/ollama")(get_ollama_config)
+api_app.post("/api/config/fallbacks")(set_fallbacks_handler)
+api_app.post("/api/config/nvidia")(set_nvidia_config)
+api_app.get("/api/config/nvidia")(get_nvidia_config)
+api_app.get("/api/requests")(get_requests)
+api_app.post("/api/requests/clear")(clear_requests)
 
 @api_app.get("/api/registry")
 async def get_registry():
@@ -360,9 +360,9 @@ async def live_feed():
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
     )
 
-@api_app.get("/api/scheduler/status")
-async def scheduler_status():
-    return get_scheduler().stats
+    @api_app.get("/api/scheduler/status")
+    async def scheduler_status():
+        return get_scheduler().stats
 
 # ============================================================================
 # WEB ROUTES
@@ -371,6 +371,8 @@ web_app.get("/")(web_dashboard)
 web_app.get("/api/stats")(web_stats_handler)
 web_app.get("/api/health")(web_health_handler)
 web_app.get("/api/config/fallbacks")(web_fallbacks)
+web_app.get("/api/config/ollama")(get_ollama_config)
+web_app.get("/api/config/nvidia")(get_nvidia_config)
 
 # ============================================================================
 # STARTUP
