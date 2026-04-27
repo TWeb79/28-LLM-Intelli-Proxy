@@ -461,6 +461,10 @@ async def health_check():
     client = await get_http_client()
     ollama_ok = False
     ollama_count = 0
+    nvidia_ok = False
+    nvidia_count = 0
+    
+    # Check Ollama
     try:
         response = await client.get(f"{_ollama_target['base_url']}/api/tags", timeout=5)
         ollama_ok = response.status_code == 200
@@ -469,8 +473,21 @@ async def health_check():
         ollama_ok = False
         ollama_count = 0
 
-    overall = "healthy" if ollama_ok else "degraded"
-    
+    # Check NVIDIA
+    try:
+        from providers.nvidia_provider import NvidiaProvider
+        nvidia_provider = NvidiaProvider()
+        nvidia_ok = await nvidia_provider.health_check()
+        if nvidia_ok:
+            nvidia_models = await nvidia_provider.list_models()
+            nvidia_count = len(nvidia_models)
+    except Exception:
+        nvidia_ok = False
+        nvidia_count = 0
+
+    # Overall status: healthy if at least one provider is working
+    overall = "healthy" if ollama_ok or nvidia_ok else "degraded"
+
     # Add optimization status to health check
     optimization_status = {}
     if _compression_engine:
@@ -484,6 +501,7 @@ async def health_check():
         "overall_status": overall,
         "proxy": {"status": "running", "port": _proxy_port},
         "ollama": {"status": "running" if ollama_ok else "unreachable", "models": ollama_count, "url": _ollama_target['base_url']},
+        "nvidia": {"status": "running" if nvidia_ok else "unreachable", "models": nvidia_count, "url": "https://integrate.api.nvidia.com/v1"},
         "optimization": optimization_status,
         "performance": {
             "classification_cache_hit_rate": _router.classification_cache.stats()["hit_rate"] if _router else "0.0%",
