@@ -103,6 +103,9 @@ from providers.ollama_provider import OllamaProvider
 from providers.nvidia_provider import NvidiaProvider
 from services.decision_engine import DecisionEngine
 from services.router import IntelligentRouter, get_http_client
+from services.context_compression import ContextCompressionEngine, get_compression_engine
+from services.model_availability import ModelAvailabilityMonitor, get_availability_monitor
+from services.model_fallback import ModelFallbackEngine, get_fallback_engine
 from services.fallbacks import set_fallbacks, set_timeout
 
 OLLAMA_PROVIDER = OllamaProvider(name="ollama", base_url=OLLAMA_TARGET.get("base_url"))
@@ -116,7 +119,7 @@ if not nvidia_api_key:
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
                 config = json.load(f)
-                nvidia_api_key = config.get("api_key", "")
+            nvidia_api_key = config.get("api_key", "")
     except Exception:
         pass
 
@@ -126,6 +129,14 @@ DECISION_ENGINE = DecisionEngine(
     decision_model=CONFIG.get("decision", {}).get("model"),
     fallback_model=CONFIG.get("proxy", {}).get("fallback_model")
 )
+
+# ============================================================================
+# OPTIMIZATION ENGINES
+# ============================================================================
+# Initialize optimization engines
+COMPRESSION_ENGINE = ContextCompressionEngine()
+AVAILABILITY_MONITOR = ModelAvailabilityMonitor(settings=CONFIG)
+FALLBACK_ENGINE = ModelFallbackEngine(settings=CONFIG)
 
 # ============================================================================
 # ROUTER
@@ -195,14 +206,15 @@ api_app.get("/health")(health_check)
 async def classify(prompt: str):
     return await classify_only(prompt)
 
-api_app.get("/config")(get_config_handler)
-api_app.get("/config/fallbacks")(get_fallbacks_handler)
-api_app.post("/config/ollama")(set_ollama_handler)
-api_app.post("/config/fallbacks")(set_fallbacks_handler)
-api_app.post("/config/nvidia")(set_nvidia_config)
-api_app.get("/config/nvidia")(get_nvidia_status)
-api_app.get("/requests")(get_requests)
-api_app.post("/requests/clear")(clear_requests)
+    api_app.get("/config")(get_config_handler)
+    api_app.get("/config/fallbacks")(get_fallbacks_handler)
+    api_app.post("/config/ollama")(set_ollama_handler)
+    api_app.get("/config/ollama")(get_ollama_config)
+    api_app.post("/config/fallbacks")(set_fallbacks_handler)
+    api_app.post("/config/nvidia")(set_nvidia_config)
+    api_app.get("/config/nvidia")(get_nvidia_config)
+    api_app.get("/requests")(get_requests)
+    api_app.post("/requests/clear")(clear_requests)
 
 @api_app.get("/api/registry")
 async def get_registry():
@@ -371,6 +383,21 @@ async def startup_event():
     logging.info(f"API: http://{PROXY_HOST}:{PROXY_PORT}")
     logging.info(f"Dashboard: http://{WEB_HOST}:{WEB_PORT}")
     logging.info("=" * 70)
+    
+    # Initialize optimization engines
+    logging.info("Initializing optimization engines...")
+    try:
+        # Start availability monitoring
+        await AVAILABILITY_MONITOR.start()
+        logging.info("✓ Model availability monitor started")
+        
+        logging.info("✓ Model fallback engine ready")
+        logging.info("✓ Context compression engine ready")
+        
+    except Exception as e:
+        logging.error(f"Failed to initialize optimization engines: {e}")
+        # Continue startup even if optimization fails
+    
     logging.info("System ready")
     logging.info("=" * 70)
 
@@ -392,6 +419,9 @@ __all__ = [
     'OLLAMA_PROVIDER',
     'NVIDIA_PROVIDER',
     'DECISION_ENGINE',
+    'COMPRESSION_ENGINE',
+    'AVAILABILITY_MONITOR',
+    'FALLBACK_ENGINE',
     'router',
     'api_app',
     'web_app',

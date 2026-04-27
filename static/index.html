@@ -651,46 +651,81 @@
     <script>
         const API_URL = `http://${window.location.hostname}:8128`;
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            loadAllData();
-            setInterval(loadAllData, 15000);
-        });
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  loadAllData();
+  loadConfiguration();
+  setInterval(loadAllData, 15000);
+});
 
-        async function loadAllData() {
-            try {
-                const [healthRes, statsRes, modelsRes] = await Promise.all([
-                    fetch(`${API_URL}/health`),
-                    fetch(`${API_URL}/stats`),
-                    fetch(`${API_URL}/models`)
-                ]);
+async function loadConfiguration() {
+  try {
+    const [ollamaConfig, nvidiaConfig] = await Promise.all([
+      fetch(`${API_URL}/config/ollama`).then(r => r.json()),
+      fetch(`${API_URL}/config/nvidia`).then(r => r.json())
+    ]);
 
-                const health = await healthRes.json();
-                const stats = await statsRes.json();
-                const models = await modelsRes.json();
+    // Only pre-fill if fields are empty (not user-modified)
+    const ollamaHost = document.getElementById('ollama-host');
+    const ollamaPort = document.getElementById('ollama-port');
+    const nvidiaApiKey = document.getElementById('nvidia-api-key');
 
-                // Status indicators
-                document.getElementById('ollama-status').className = `status-dot ${health.ollama?.status === 'running' ? 'healthy' : ''}`;
-                document.getElementById('nvidia-status').className = `status-dot ${health.nvidia?.status === 'running' ? 'healthy' : ''}`;
-                document.getElementById('router-status').className = `status-dot ${health.overall_status === 'healthy' ? 'healthy' : 'warning'}`;
+    if (!ollamaHost.value) {
+      ollamaHost.value = ollamaConfig.host || 'localhost';
+    }
+    if (!ollamaPort.value) {
+      ollamaPort.value = ollamaConfig.port || 11434;
+    }
+    if (!nvidiaApiKey.value) {
+      nvidiaApiKey.value = nvidiaConfig.api_key || '';
+    }
 
-                // Stats
-                document.getElementById('total-requests').textContent = stats.requests?.total_requests || 0;
-                document.getElementById('models-count').textContent = models.total || 0;
-                document.getElementById('cache-hit-rate').textContent = stats.cache?.hit_rate || '0%';
-                document.getElementById('system-status').textContent = health.overall_status === 'healthy' ? 'Healthy' : 'Degraded';
-                document.getElementById('system-status').className = 'badge ' + (health.overall_status === 'healthy' ? 'badge-green' : 'badge-red');
+  } catch (e) {
+    console.error('Failed to load configuration:', e);
+    // Use defaults if config loading fails
+    if (!document.getElementById('ollama-host').value) {
+      document.getElementById('ollama-host').value = 'localhost';
+    }
+    if (!document.getElementById('ollama-port').value) {
+      document.getElementById('ollama-port').value = 11434;
+    }
+  }
+}
 
-                // Models table
-                renderModelsTable(models, stats);
+async function loadAllData() {
+  try {
+    const [healthRes, statsRes, modelsRes] = await Promise.all([
+      fetch(`${API_URL}/health`),
+      fetch(`${API_URL}/stats`),
+      fetch(`${API_URL}/models`)
+    ]);
 
-                // Fallback list
-                renderFallbacks(await fetch(`${API_URL}/config/fallbacks`).then(r => r.json()));
+    const health = await healthRes.json();
+    const stats = await statsRes.json();
+    const models = await modelsRes.json();
 
-            } catch (e) {
-                console.error('Failed to load data:', e);
-            }
-        }
+    // Status indicators
+    document.getElementById('ollama-status').className = `status-dot ${health.ollama?.status === 'running' ? 'healthy' : ''}`;
+    document.getElementById('nvidia-status').className = `status-dot ${health.nvidia?.status === 'running' ? 'healthy' : ''}`;
+    document.getElementById('router-status').className = `status-dot ${health.overall_status === 'healthy' ? 'healthy' : 'warning'}`;
+
+    // Stats
+    document.getElementById('total-requests').textContent = stats.requests?.total_requests || 0;
+    document.getElementById('models-count').textContent = models.total || 0;
+    document.getElementById('cache-hit-rate').textContent = stats.cache?.hit_rate || '0%';
+    document.getElementById('system-status').textContent = health.overall_status === 'healthy' ? 'Healthy' : 'Degraded';
+    document.getElementById('system-status').className = 'badge ' + (health.overall_status === 'healthy' ? 'badge-green' : 'badge-red');
+
+    // Models table
+    renderModelsTable(models, stats);
+
+    // Fallback list
+    renderFallbacks(await fetch(`${API_URL}/config/fallbacks`).then(r => r.json()));
+
+  } catch (e) {
+    console.error('Failed to load data:', e);
+  }
+}
 
         function renderModelsTable(models, stats) {
             const tbody = document.getElementById('models-body');
@@ -849,41 +884,61 @@
             }
         }
 
-        async function refreshModels() {
-            const btn = event.target;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> Refreshing...';
+async function refreshModels() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Refreshing...';
 
-            try {
-                const response = await fetch(`${API_URL}/api/registry/refresh`, { method: 'POST' });
-                const data = await response.json();
-                
-                if (data.status === 'completed') {
-                    console.log('Refresh completed:', data);
-                    // Display detailed results
-                    const totalModels = data.total_models || 0;
-                    const ollamaModels = data.providers?.ollama?.models || 0;
-                    const nvidiaModels = data.providers?.nvidia?.models || 0;
-                    
-                    alert(`✅ Refresh completed!\n\n` +
-                          `Total models: ${totalModels}\n` +
-                          `Ollama: ${ollamaModels} models\n` +
-                          `NVIDIA: ${nvidiaModels} models\n` +
-                          `All models are now available for routing.`);
-                }
-                
-                setTimeout(() => {
-                    loadAllData();
-                    btn.disabled = false;
-                    btn.textContent = '🔄 Refresh';
-                }, 2000);
-            } catch (e) {
-                console.error('Refresh failed:', e);
-                alert('❌ Failed to refresh models. Check console for details.');
-                btn.disabled = false;
-                btn.textContent = '🔄 Refresh';
-            }
-        }
+  try {
+    const response = await fetch(`${API_URL}/api/registry/refresh`, { method: 'POST' });
+    const data = await response.json();
+
+    if (data.status === 'completed') {
+      console.log('Refresh completed:', data);
+      // Display detailed results
+      const totalModels = data.total_models || 0;
+      const ollamaModels = data.providers?.ollama?.models || 0;
+      const nvidiaModels = data.providers?.nvidia?.models || 0;
+
+      // Force immediate data refresh instead of waiting
+      await loadAllData();
+      
+      // Show success notification instead of alert
+      const notification = document.createElement('div');
+      notification.className = 'alert alert-success';
+      notification.style.cssText = 'position:fixed;top:20px;right:20px;z-index:1000;max-width:300px;';
+      notification.innerHTML = `
+        <strong>✅ Refresh completed!</strong><br>
+        Total models: ${totalModels}<br>
+        Ollama: ${ollamaModels} models<br>
+        NVIDIA: ${nvidiaModels} models
+      `;
+      document.body.appendChild(notification);
+      
+      setTimeout(() => notification.remove(), 5000);
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🔄 Refresh';
+  } catch (e) {
+    console.error('Refresh failed:', e);
+    
+    // Show error notification
+    const notification = document.createElement('div');
+    notification.className = 'alert alert-error';
+    notification.style.cssText = 'position:fixed;top:20px;right:20px;z-index:1000;max-width:300px;';
+    notification.innerHTML = `
+      <strong>❌ Refresh failed</strong><br>
+      ${e.message || 'Check console for details'}
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => notification.remove(), 5000);
+    
+    btn.disabled = false;
+    btn.textContent = '🔄 Refresh';
+  }
+}
 
         async function runPerfTest() {
             const btn = document.getElementById('perf-btn');

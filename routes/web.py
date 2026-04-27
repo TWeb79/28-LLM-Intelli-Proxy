@@ -68,6 +68,21 @@ async def get_fallbacks_config():
     }
 
 
+async def get_ollama_config():
+    """Get current Ollama configuration."""
+    return {
+        "host": os.getenv("OLLAMA_HOST", "localhost"),
+        "port": int(os.getenv("OLLAMA_PORT", "11434"))
+    }
+
+
+async def get_nvidia_config():
+    """Get current NVIDIA configuration."""
+    return {
+        "api_key": os.getenv("NVIDIA_API_KEY", "")
+    }
+
+
 async def dashboard():
     """Serve dashboard HTML."""
     static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")

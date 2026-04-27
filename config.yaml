@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
 
-    image: llmproxy:latest   # local image only
+    image: llmproxy:latest # local image only
     container_name: llmproxy
     restart: unless-stopped
 
@@ -20,7 +20,7 @@ services:
       PROXY_PORT: 8128
       DASHBOARD_PORT: 8028
       LOG_LEVEL: info
-      OLLAMA_HOST: host.docker.internal   # connect to host Ollama
+      OLLAMA_HOST: host.docker.internal # connect to host Ollama
       OLLAMA_PORT: 11434
       NVIDIA_API_KEY: ""
       DECISION_MODEL: ""
@@ -48,3 +48,45 @@ volumes:
 networks:
   llmproxy_net:
     driver: bridge
+
+# New optimization configuration sections
+compression:
+  enabled: true # COMPRESSION_ENABLED
+  level: medium # low | medium | high
+  max_tokens: 4096 # MAX_TOKENS
+  mode: coding # coding | chat | general
+
+fallback:
+  enabled: true # FALLBACK_ENABLED
+  max_attempts: 3 # maximum models to try before returning error
+  retry_on: # HTTP status codes and error types that trigger fallback
+    - 429 # rate limited
+    - 500 # internal server error
+    - 502 # bad gateway
+    - 503 # service unavailable
+    - 504 # gateway timeout
+    - timeout # request timeout
+    - connection_error # provider unreachable
+  similarity_strategy: category_then_size
+  excluded_models: [] # model IDs never used as fallback targets
+
+availability:
+  enabled: true # AVAILABILITY_ENABLED
+  check_interval_seconds: 60 # how often to probe each model
+  probe_timeout_seconds: 10 # max wait per probe before marking unresponsive
+  recovery_window_hours: 168 # hours of history to use for ETA prediction (7 days)
+  min_samples_for_eta: 3 # minimum past downtime events needed before showing ETA
+  mark_unavailable_after: 2 # consecutive failures before marking unavailable
+  mark_available_after: 1 # consecutive successes before marking recovered
+
+session:
+  enabled: false # SESSION_AFFINITY_ENABLED (Phase 9)
+  idle_timeout_minutes: 30
+  coding_idle_timeout_minutes: 60
+  persist_to_db: false
+  allow_client_override: true
+  notify_on_switch: true
+  notify_modes:
+    - coding
+  context_forwarding_enabled: true
+  context_forwarding_compression: auto
