@@ -70,7 +70,7 @@ class OllamaClient:
     def list_models(self) -> Dict:
         """
         List all available models (including IntelliProxyLLM).
-        Equivalent to: curl http://localhost:9998/api/tags
+        Equivalent to: curl http://localhost:8128/api/tags
         
         Note: This always connects to the proxy to get the full model list.
         
@@ -116,7 +116,7 @@ class OllamaClient:
     ) -> Union[Dict, Iterator[str]]:
         """
         Generate text completion.
-        Equivalent to: curl -X POST http://localhost:9998/api/generate
+        Equivalent to: curl -X POST http://localhost:8128/api/generate
         
         Args:
             prompt: The prompt to generate completion for
@@ -163,7 +163,7 @@ class OllamaClient:
     ) -> Union[Dict, Iterator[str]]:
         """
         Generate chat completion.
-        Equivalent to: curl -X POST http://localhost:9998/api/chat
+        Equivalent to: curl -X POST http://localhost:8128/api/chat
         
         Args:
             messages: List of message dicts with 'role' and 'content' keys
@@ -343,7 +343,7 @@ def example_usage():
     
     logging.getLogger(__name__).info("\n🚀 Ollama Compatible Client for IntelliProxy\n")
     
-    # Create client (connects to proxy on port 9998)
+    # Create client (connects to proxy on port 8128)
     client = OllamaClient()
     
     # 1. List models

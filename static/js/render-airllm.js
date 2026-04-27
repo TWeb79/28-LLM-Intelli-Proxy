@@ -15,7 +15,7 @@ function renderAirLLMConfig() {
     if (portInput) portInput.value = airllmConfig.ollama_port || 11434;
     if (airllmEnabled) airllmEnabled.value = airllmConfig.airllm_enabled ? 'true' : 'false';
     if (airllmHost) airllmHost.value = airllmConfig.airllm_host || 'airllm';
-    if (airllmPort) airllmPort.value = airllmConfig.airllm_port || 9996;
+    if (airllmPort) airllmPort.value = airllmConfig.airllm_port || 8128;
     
     // Render model AirLLM toggles
     renderModelAirLLMToggles();

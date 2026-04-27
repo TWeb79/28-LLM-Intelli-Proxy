@@ -283,7 +283,7 @@ The decision engine generates routing prompts from the live model registry — n
 ### Environment Variables
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PROXY_PORT` | `8130` | API server port |
+| `PROXY_PORT` \| `8128` \| API server port \|
 | `OLLAMA_HOST` | `localhost` | Ollama hostname |
 | `OLLAMA_PORT` | `11434` | Ollama port |
 | `DECISION_MODEL` | *(empty)* | Model used for LLM-based routing |

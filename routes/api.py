@@ -39,7 +39,7 @@ _classifier_model: Optional[str] = None
 _ollama_target: Dict[str, str] = {"base_url": "http://localhost:11434"}
 _decision_engine: Optional[DecisionEngine] = None
 _ollama_provider: Optional[OllamaProvider] = None
-_proxy_port: int = 8130
+_proxy_port: int = 8128
 _db_path: str = "/data/llmproxy.db"
 
 # Optimization engines

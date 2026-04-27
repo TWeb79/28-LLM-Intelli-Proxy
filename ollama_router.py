@@ -26,7 +26,7 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.yaml")
 def load_config() -> dict:
     config = {
         "proxy": {
-            "port": int(os.getenv("PROXY_PORT", "8130")),
+            "port": int(os.getenv("PROXY_PORT", "8128")),
             "host": os.getenv("PROXY_HOST", "0.0.0.0"),
             "log_level": os.getenv("LOG_LEVEL", "info"),
             "fallback_model": os.getenv("FALLBACK_MODEL", "qwen2.5:8b"),
@@ -41,7 +41,7 @@ def load_config() -> dict:
         },
         "providers": [],
         "server": {
-            "port": int(os.getenv("DASHBOARD_PORT", os.getenv("WEB_PORT", "3000"))),
+            "port": int(os.getenv("DASHBOARD_PORT", os.getenv("WEB_PORT", "8028"))),
         }
     }
     if os.path.exists(CONFIG_FILE):
@@ -78,9 +78,9 @@ OLLAMA_TARGET = {
 OLLAMA_TARGET["base_url"] = f"http://{OLLAMA_TARGET['host']}:{OLLAMA_TARGET['port']}"
 
 PROXY_HOST = CONFIG.get('proxy', {}).get('host', '0.0.0.0')
-PROXY_PORT = CONFIG.get('proxy', {}).get('port', 8130)
+PROXY_PORT = CONFIG.get('proxy', {}).get('port', 8128)
 WEB_HOST = os.getenv('WEB_HOST', '0.0.0.0')
-WEB_PORT = CONFIG.get('server', {}).get('port', 3000)
+WEB_PORT = CONFIG.get('server', {}).get('port', 8028)
 
 CLASSIFIER_MODEL = CONFIG.get('decision', {}).get('model') or os.getenv('CLASSIFIER_MODEL', '')
 REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', '120'))
