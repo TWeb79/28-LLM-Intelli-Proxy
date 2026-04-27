@@ -1,34 +1,50 @@
-# LLM IntelliProxy Configuration
-# Canonical configuration schema for Project 28
+services:
+  llmproxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
 
-proxy:
-  port: 8128
-  log_level: info
-  fallback_model: qwen2.5:7b
+    image: llmproxy:latest   # local image only
+    container_name: llmproxy
+    restart: unless-stopped
 
-decision:
-  model: ""  # Empty = use heuristic routing; set to a model ID for LLM-based routing
-  refresh_registry_on_startup: true
+    ports:
+      - "8128:8128"
+      - "8028:8028"
 
-providers:
-  - name: ollama
-    type: ollama
-    base_url: http://ollama:11434
-    refresh_interval_minutes: 15
-    enabled: true
+    volumes:
+      - proxy_data:/data
+      - ./config.yaml:/app/config.yaml:ro
 
-  - name: nvidia
-    type: openai_compatible
-    base_url: https://integrate.api.nvidia.com/v1
-    api_key: ${NVIDIA_API_KEY}
-    model_catalog_url: https://build.nvidia.com/models
-    enabled: false  # Disabled by default, enable if NVIDIA_API_KEY is set
+    environment:
+      PROXY_PORT: 8128
+      DASHBOARD_PORT: 8028
+      LOG_LEVEL: info
+      OLLAMA_HOST: host.docker.internal   # connect to host Ollama
+      OLLAMA_PORT: 11434
+      NVIDIA_API_KEY: ""
+      DECISION_MODEL: ""
+      FALLBACK_MODEL: qwen2.5:8b
+      DATA_DIR: /data
+      PROXY_HOST: 0.0.0.0
+      WEB_HOST: 0.0.0.0
+      CLASSIFIER_MODEL: qwen2.5:8b
+      REQUEST_TIMEOUT: 120
+      FALLBACK_TIMEOUT: 30
 
-storage:
-  type: sqlite
-  path: /data/llmproxy.db
+    networks:
+      - llmproxy_net
 
-# Optional: Override default ports
-# dashboard:
-#   port: 8028
-#   host: 0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8128/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  proxy_data:
+
+networks:
+  llmproxy_net:
+    driver: bridge

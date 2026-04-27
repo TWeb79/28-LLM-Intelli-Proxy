@@ -306,9 +306,7 @@
             border: 1px solid var(--border);
         }
         .btn-secondary:hover { background: var(--border); }
-        .btn-danger {
-            background: var(--accent-red);
-        }
+        .btn-danger { background: var(--accent-red); }
         .btn-danger:hover { background: #dc2626; }
 
         /* Meters */
@@ -347,8 +345,16 @@
             font-size: 13px;
             margin-bottom: 16px;
         }
-        .alert-success { background: rgba(34, 197, 94, 0.15); color: var(--accent-green); border: 1px solid rgba(34, 197, 94, 0.3); }
-        .alert-error { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .alert-success {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .alert-error {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
 
         /* Footer */
         footer {
@@ -413,6 +419,10 @@
                 <span>Ollama</span>
             </div>
             <div class="status-item">
+                <div class="status-dot" id="nvidia-status"></div>
+                <span>NVIDIA</span>
+            </div>
+            <div class="status-item">
                 <div class="status-dot healthy" id="router-status"></div>
                 <span>IntelliProxy</span>
             </div>
@@ -439,7 +449,7 @@
                         <div class="card-icon">🧠</div>
                     </div>
                     <div class="card-value" id="models-count">0</div>
-                    <div class="card-label">From Ollama registry</div>
+                    <div class="card-label">From all providers</div>
                 </div>
 
                 <div class="card">
@@ -502,8 +512,7 @@
                 </div>
                 <p id="perf-status" style="font-size:12px;color:var(--text-secondary);margin-top:8px;"></p>
             </div>
-
-            <div class="table-container>
+            <div class="table-container">
                 <table id="perf-table">
                     <thead>
                         <tr>
@@ -533,7 +542,7 @@
                     </div>
                     <div class="form-group">
                         <label>Port</label>
-                        <input type="number" id="ollama-port" placeholder="8128">
+                        <input type="number" id="ollama-port" placeholder="11434">
                     </div>
                     <div class="form-group" style="justify-content:flex-end;">
                         <button class="btn" onclick="saveOllamaConfig()">Save</button>
@@ -542,13 +551,27 @@
                 <p id="ollama-status" style="font-size:12px;margin-top:8px;"></p>
             </div>
 
+            <!-- NVIDIA Configuration -->
+            <div class="card" style="margin-bottom:16px;">
+                <h3 style="font-size:16px;font-weight:600;margin-bottom:12px;">🟢 NVIDIA NIM Configuration</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="password" id="nvidia-api-key" placeholder="nvapi-...">
+                    </div>
+                    <div class="form-group" style="justify-content:flex-end;">
+                        <button class="btn" onclick="saveNvidiaConfig()">Save</button>
+                    </div>
+                </div>
+                <p id="nvidia-status" style="font-size:12px;margin-top:8px;"></p>
+            </div>
+
             <!-- Fallback Configuration -->
             <div class="card">
                 <h3 style="font-size:16px;font-weight:600;margin-bottom:12px;">🔁 Fallback Rules</h3>
                 <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;">
                     Configure fallback models for automatic failover when a model is unavailable.
                 </p>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label>Primary Model</label>
@@ -562,9 +585,7 @@
                         <button class="btn" onclick="addFallback()">Add Rule</button>
                     </div>
                 </div>
-
                 <p id="fb-status" style="font-size:12px;margin-top:8px;"></p>
-
                 <div id="fallback-list" style="margin-top:16px;"></div>
             </div>
         </section>
@@ -591,6 +612,11 @@
                             <td><code>GET /models</code></td>
                             <td>List available models</td>
                             <td><code>curl http://localhost:8128/models</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>POST /api/registry/refresh</code></td>
+                            <td>Refresh model registry</td>
+                            <td><code>curl -X POST http://localhost:8128/api/registry/refresh</code></td>
                         </tr>
                         <tr>
                             <td><code>POST /api/generate</code></td>
@@ -645,6 +671,7 @@
 
                 // Status indicators
                 document.getElementById('ollama-status').className = `status-dot ${health.ollama?.status === 'running' ? 'healthy' : ''}`;
+                document.getElementById('nvidia-status').className = `status-dot ${health.nvidia?.status === 'running' ? 'healthy' : ''}`;
                 document.getElementById('router-status').className = `status-dot ${health.overall_status === 'healthy' ? 'healthy' : 'warning'}`;
 
                 // Stats
@@ -728,6 +755,29 @@
                 });
                 if (res.ok) {
                     statusEl.textContent = '✅ Configuration saved';
+                    statusEl.style.color = 'var(--accent-green)';
+                    setTimeout(loadAllData, 1000);
+                } else {
+                    throw new Error('Failed to save');
+                }
+            } catch (e) {
+                statusEl.textContent = '❌ Error saving configuration';
+                statusEl.style.color = 'var(--accent-red)';
+            }
+        }
+
+        async function saveNvidiaConfig() {
+            const apiKey = document.getElementById('nvidia-api-key').value;
+            const statusEl = document.getElementById('nvidia-status');
+
+            try {
+                const res = await fetch(`${API_URL}/config/nvidia`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey })
+                });
+                if (res.ok) {
+                    statusEl.textContent = '✅ NVIDIA configuration saved';
                     statusEl.style.color = 'var(--accent-green)';
                     setTimeout(loadAllData, 1000);
                 } else {
