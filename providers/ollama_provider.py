@@ -53,3 +53,20 @@ class OllamaProvider:
             resp = await client.post(url, json=body)
             resp.raise_for_status()
             return resp.json()
+
+    async def health_check(self) -> bool:
+        """Check if Ollama is reachable and has available models.
+        
+        Returns:
+            True if API is accessible and models are available, False otherwise
+        """
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(f"{self.base_url}/api/tags")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    models = data.get("models", [])
+                    return len(models) > 0
+                return False
+        except Exception:
+            return False

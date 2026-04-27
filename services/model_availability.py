@@ -38,7 +38,7 @@ class ModelAvailabilityMonitor:
     
     def __init__(self, settings: Dict[str, Any]):
         self.settings = settings
-        self.check_interval = settings.get("check_interval_seconds", 60)
+        self.check_interval = settings.get("check_interval_seconds", 300)  # 5 minutes
         self.probe_timeout = settings.get("probe_timeout_seconds", 10)
         self.recovery_window = settings.get("recovery_window_hours", 168)
         self.min_samples = settings.get("min_samples_for_eta", 3)
@@ -403,17 +403,17 @@ class ModelAvailabilityMonitor:
             return [dict(row) for row in cursor.fetchall()]
     
     async def report_external_failure(
-        self, 
-        model_id: str, 
-        provider: str, 
-        error_code: str, 
+        self,
+        model_id: str,
+        provider: str,
+        error_code: str,
         error_message: str,
-        timestamp: datetime = None
+        timestamp: Optional[datetime] = None
     ):
         """Report a failure from external source (e.g., fallback engine)."""
         if timestamp is None:
             timestamp = datetime.utcnow()
-        
+
         await self._update_model_status(
             model_id, provider, False, 0, error_code, error_message
         )
@@ -423,7 +423,7 @@ class ModelAvailabilityMonitor:
 _availability_monitor = None
 
 
-def get_availability_monitor(settings: Dict[str, Any] = None) -> ModelAvailabilityMonitor:
+def get_availability_monitor(settings: Optional[Dict[str, Any]] = None) -> ModelAvailabilityMonitor:
     """Get the global availability monitor instance."""
     global _availability_monitor
     if _availability_monitor is None:

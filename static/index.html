@@ -1,331 +1,337 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IntelliProxy — Intelligent LLM Router</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/dashboard.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IntelliProxy — Intelligent LLM Router</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
 
 <div class="app-shell">
 
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="sidebar-brand">
-      <div class="brand-lockup">
-        <div class="brand-logo">IP</div>
-        <span class="brand-text">IntelliProxy</span>
-      </div>
-      <span class="brand-version">v3.0</span>
-    </div>
-
-    <div class="sidebar-nav">
-      <div class="nav-label">Navigation</div>
-      <nav>
-        <a href="#overview" class="active">
-          <span class="nav-icon">◈</span> Overview
-        </a>
-        <a href="#models">
-          <span class="nav-icon">⬡</span> Models
-        </a>
-        <a href="#performance">
-          <span class="nav-icon">◎</span> Performance
-        </a>
-        <a href="#configuration">
-          <span class="nav-icon">⊞</span> Configuration
-        </a>
-        <a href="#api">
-          <span class="nav-icon">⌁</span> API Reference
-        </a>
-      </nav>
-    </div>
-
-    <div class="sidebar-status">
-      <div class="status-label">Service Health</div>
-      <div class="status-item">
-        <div class="status-item-left">
-          <div class="status-dot" id="ollama-status"></div>
-          <span>Ollama</span>
-        </div>
-      </div>
-      <div class="status-item">
-        <div class="status-item-left">
-          <div class="status-dot" id="nvidia-status"></div>
-          <span>NVIDIA NIM</span>
-        </div>
-      </div>
-      <div class="status-item">
-        <div class="status-item-left">
-          <div class="status-dot healthy" id="router-status"></div>
-          <span>Router</span>
-        </div>
-      </div>
-    </div>
-  </aside>
-
-  <!-- Main Content -->
-  <div class="main-content">
-
-    <!-- Top Bar -->
-    <div class="topbar">
-      <span class="topbar-title">LLM Routing Dashboard</span>
-      <div class="topbar-meta">
-        <span>localhost:8128</span>
-        <span style="color:var(--green);">● LIVE</span>
-      </div>
-    </div>
-
-    <div class="page">
-
-      <!-- Overview Section -->
-      <section id="overview" class="section">
-        <div class="section-header">
-          <h2 class="section-title">System Overview</h2>
-        </div>
-        <div class="metrics-grid">
-          <div class="metric-card">
-            <div class="metric-header">
-              <div class="metric-label">Total Requests</div>
-              <div class="metric-icon">📊</div>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-lockup">
+                <div class="brand-logo">IP</div>
+                <span class="brand-text">IntelliProxy</span>
             </div>
-            <div class="metric-value" id="total-requests">0</div>
-            <div class="metric-sub">Requests routed</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-header">
-              <div class="metric-label">Models Available</div>
-              <div class="metric-icon">🧠</div>
-            </div>
-            <div class="metric-value" id="models-count">0</div>
-            <div class="metric-sub">From all providers</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-header">
-              <div class="metric-label">Cache Hit Rate</div>
-              <div class="metric-icon">⚡</div>
-            </div>
-            <div class="metric-value" id="cache-hit-rate">0%</div>
-            <div class="metric-sub">Task classification cache</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-header">
-              <div class="metric-label">System Status</div>
-              <div class="metric-icon">🔧</div>
-            </div>
-            <div class="metric-value" id="system-status">—</div>
-            <div class="metric-sub">Overall health</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Models Section -->
-      <section id="models" class="section">
-        <div class="section-header">
-          <h2 class="section-title">Available Models</h2>
-          <button class="btn btn-secondary" onclick="refreshModels()">↻&nbsp; Refresh</button>
-        </div>
-        <div class="panel">
-          <div class="table-wrap">
-            <table id="models-table">
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Provider</th>
-                  <th>Category</th>
-                  <th>Speed</th>
-                  <th>Complexity</th>
-                  <th>Requests</th>
-                  <th>Avg Time</th>
-                </tr>
-              </thead>
-              <tbody id="models-body">
-                <tr><td colspan="7" class="empty">Loading models…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- Performance Section -->
-      <section id="performance" class="section">
-        <div class="section-header">
-          <h2 class="section-title">Performance Test</h2>
+            <span class="brand-version">v3.0</span>
         </div>
 
-        <div class="perf-panel">
-          <div class="form-row">
-            <div class="form-group" style="flex:1;min-width:260px;">
-              <label>Test Prompt</label>
-              <input type="text" id="perf-prompt" value="Write a Python function to reverse a linked list.">
-            </div>
-            <div class="form-group">
-              <button class="btn" onclick="runPerfTest()" id="perf-btn">▶&nbsp; Run Test</button>
-            </div>
-          </div>
-          <p id="perf-status" class="status-text"></p>
+        <div class="sidebar-nav">
+            <div class="nav-label">Navigation</div>
+            <nav>
+                <a href="#overview" class="active">
+                    <span class="nav-icon">◈</span>
+                    Overview
+                </a>
+                <a href="#models">
+                    <span class="nav-icon">⬡</span>
+                    Models
+                </a>
+                <a href="#performance">
+                    <span class="nav-icon">◎</span>
+                    Performance
+                </a>
+                <a href="#configuration">
+                    <span class="nav-icon">⊞</span>
+                    Configuration
+                </a>
+                <a href="#api">
+                    <span class="nav-icon">⌁</span>
+                    API Reference
+                </a>
+            </nav>
         </div>
 
-        <div class="panel">
-          <div class="table-wrap">
-            <table id="perf-table">
-              <thead>
-                <tr>
-                  <th>Mode</th>
-                  <th>Model</th>
-                  <th>Duration</th>
-                  <th>Tokens</th>
-                  <th>Response Preview</th>
-                </tr>
-              </thead>
-              <tbody id="perf-body">
-                <tr><td colspan="5" class="empty">Run a test to see results</td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="sidebar-status">
+            <div class="status-label">Service Health</div>
+            <div class="status-item">
+                <div class="status-item-left">
+                    <div class="status-dot" id="ollama-status"></div>
+                    <span>Ollama</span>
+                </div>
+            </div>
+            <div class="status-item">
+                <div class="status-item-left">
+                    <div class="status-dot" id="nvidia-status"></div>
+                    <span>NVIDIA NIM</span>
+                </div>
+            </div>
+            <div class="status-item">
+                <div class="status-item-left">
+                    <div class="status-dot healthy" id="router-status"></div>
+                    <span>Router</span>
+                </div>
+            </div>
         </div>
-      </section>
+    </aside>
 
-      <!-- Configuration Section -->
-      <section id="configuration" class="section">
-        <div class="section-header">
-          <h2 class="section-title">Configuration</h2>
-        </div>
+    <!-- Main Content -->
+    <div class="main-content">
 
-        <!-- Ollama -->
-        <div class="config-panel">
-          <h3 class="config-panel-title">
-            <span style="color:var(--cyan);font-size:16px;">⊕</span>
-            Ollama Connection
-          </h3>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Host</label>
-              <input type="text" id="ollama-host" placeholder="localhost">
+        <!-- Top Bar -->
+        <div class="topbar">
+            <span class="topbar-title">LLM Routing Dashboard</span>
+            <div class="topbar-meta">
+                <span>localhost:8128</span>
+                <span style="color:var(--green);">● LIVE</span>
             </div>
-            <div class="form-group">
-              <label>Port</label>
-              <input type="number" id="ollama-port" placeholder="11434" style="min-width:100px;">
-            </div>
-            <div class="form-group">
-              <button class="btn" onclick="saveOllamaConfig()">Save Configuration</button>
-            </div>
-          </div>
-          <p id="ollama-status" class="status-text"></p>
         </div>
 
-        <!-- NVIDIA -->
-        <div class="config-panel">
-          <h3 class="config-panel-title">
-            <span style="color:var(--green);font-size:16px;">⊕</span>
-            NVIDIA NIM Configuration
-          </h3>
-          <div class="form-row">
-            <div class="form-group" style="flex:1;min-width:240px;">
-              <label>API Key</label>
-              <input type="password" id="nvidia-api-key" placeholder="nvapi-…">
-            </div>
-            <div class="form-group">
-              <button class="btn" onclick="saveNvidiaConfig()">Save & Test</button>
-            </div>
-          </div>
-          <p id="nvidia-status" class="status-text"></p>
-        </div>
+        <div class="page">
 
-        <!-- Fallback Rules -->
-        <div class="config-panel">
-          <h3 class="config-panel-title">
-            <span style="color:var(--amber);font-size:16px;">↺</span>
-            Fallback Rules
-          </h3>
-          <p style="font-size:12px;color:var(--text-3);margin-bottom:18px;line-height:1.5;">
-            Configure fallback models for automatic failover when a primary model is unavailable.
-          </p>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Primary Model</label>
-              <select id="fb-primary"></select>
-            </div>
-            <div class="form-group">
-              <label>Fallback Model</label>
-              <select id="fb-fallback"></select>
-            </div>
-            <div class="form-group">
-              <button class="btn" onclick="addFallback()">Add Rule</button>
-            </div>
-          </div>
-          <p id="fb-status" class="status-text"></p>
-          <div id="fallback-list" style="margin-top:18px;"></div>
-        </div>
-      </section>
+            <!-- Overview Section -->
+            <section id="overview" class="section">
+                <div class="section-header">
+                    <h2 class="section-title">System Overview</h2>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <div class="metric-label">Total Requests</div>
+                            <div class="metric-icon">📊</div>
+                        </div>
+                        <div class="metric-value" id="total-requests">0</div>
+                        <div class="metric-sub">Requests routed</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <div class="metric-label">Models Available</div>
+                            <div class="metric-icon">🧠</div>
+                        </div>
+                        <div class="metric-value" id="models-count">0</div>
+                        <div class="metric-sub">From all providers</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <div class="metric-label">Cache Hit Rate</div>
+                            <div class="metric-icon">⚡</div>
+                        </div>
+                        <div class="metric-value" id="cache-hit-rate">0%</div>
+                        <div class="metric-sub">Task classification cache</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <div class="metric-label">System Status</div>
+                            <div class="metric-icon">🔧</div>
+                        </div>
+                        <div class="metric-value" id="system-status">—</div>
+                        <div class="metric-sub">Overall health</div>
+                    </div>
+                </div>
+            </section>
 
-      <!-- API Reference Section -->
-      <section id="api" class="section">
-        <div class="section-header">
-          <h2 class="section-title">API Reference</h2>
-        </div>
-        <div class="panel">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Endpoint</th>
-                  <th>Description</th>
-                  <th>Example</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>GET /health</code></td>
-                  <td style="color:var(--text-2);">System health check</td>
-                  <td><code>curl http://localhost:8128/health</code></td>
-                </tr>
-                <tr>
-                  <td><code>GET /models</code></td>
-                  <td style="color:var(--text-2);">List available models</td>
-                  <td><code>curl http://localhost:8128/models</code></td>
-                </tr>
-                <tr>
-                  <td><code>POST /api/registry/refresh</code></td>
-                  <td style="color:var(--text-2);">Refresh model registry</td>
-                  <td><code>curl -X POST http://localhost:8128/api/registry/refresh</code></td>
-                </tr>
-                <tr>
-                  <td><code>POST /api/generate</code></td>
-                  <td style="color:var(--text-2);">Generate completion (Ollama-compatible)</td>
-                  <td><code>curl -X POST .../api/generate -d '{…}'</code></td>
-                </tr>
-                <tr>
-                  <td><code>POST /api/chat</code></td>
-                  <td style="color:var(--text-2);">Chat completion (Ollama-compatible)</td>
-                  <td><code>curl -X POST .../api/chat -d '{…}'</code></td>
-                </tr>
-                <tr>
-                  <td><code>GET /stats</code></td>
-                  <td style="color:var(--text-2);">Usage statistics</td>
-                  <td><code>curl http://localhost:8128/stats</code></td>
-                </tr>
-                <tr>
-                  <td><code>GET /api/decisions</code></td>
-                  <td style="color:var(--text-2);">Routing decision log</td>
-                  <td><code>curl http://localhost:8128/api/decisions</code></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+            <!-- Models Section -->
+            <section id="models" class="section">
+                <div class="section-header">
+                    <h2 class="section-title">Available Models</h2>
+                    <button class="btn btn-secondary" onclick="refreshModels()">↻&nbsp; Refresh</button>
+                </div>
+                <div class="panel">
+                    <div class="table-wrap">
+                        <table id="models-table">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>Provider</th>
+                                    <th>Category</th>
+                                    <th>Speed</th>
+                                    <th>Complexity</th>
+                                    <th>Requests</th>
+                                    <th>Avg Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="models-body">
+                                <tr><td colspan="7" class="empty">Loading models…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
 
-    </div><!-- /page -->
+            <!-- Performance Section -->
+            <section id="performance" class="section">
+                <div class="section-header">
+                    <h2 class="section-title">Performance Test</h2>
+                </div>
 
-    <footer>
-      IntelliProxy v3.0 — Intelligent LLM Routing &bull; Built with ❤️ by Torsten Weber
-    </footer>
+                <div class="perf-panel">
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;min-width:260px;">
+                            <label>Test Prompt</label>
+                            <input type="text" id="perf-prompt" value="Write a Python function to reverse a linked list.">
+                        </div>
+                        <div class="form-group">
+                            <button class="btn" onclick="runPerfTest()" id="perf-btn">▶&nbsp; Run Test</button>
+                        </div>
+                    </div>
+                    <p id="perf-status" class="status-text"></p>
+                </div>
 
-  </div><!-- /main-content -->
+                <div class="panel">
+                    <div class="table-wrap">
+                        <table id="perf-table">
+                            <thead>
+                                <tr>
+                                    <th>Mode</th>
+                                    <th>Model</th>
+                                    <th>Duration</th>
+                                    <th>Tokens</th>
+                                    <th>Response Preview</th>
+                                </tr>
+                            </thead>
+                            <tbody id="perf-body">
+                                <tr><td colspan="5" class="empty">Run a test to see results</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Configuration Section -->
+            <section id="configuration" class="section">
+                <div class="section-header">
+                    <h2 class="section-title">Configuration</h2>
+                </div>
+
+                <!-- Ollama -->
+                <div class="config-panel">
+                    <h3 class="config-panel-title">
+                        <span style="color:var(--cyan);font-size:16px;">⊕</span>
+                        Ollama Connection
+                    </h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Host</label>
+                            <input type="text" id="ollama-host" placeholder="localhost">
+                        </div>
+                        <div class="form-group">
+                            <label>Port</label>
+                            <input type="number" id="ollama-port" placeholder="11434" style="min-width:100px;">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end; gap: 12px;">
+                            <button class="btn" onclick="saveOllamaConfig()">Save Configuration</button>
+                            <div id="ollama-status-text" class="status-text" style="margin-top: 0; margin-bottom: 9px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NVIDIA -->
+                <div class="config-panel">
+                    <h3 class="config-panel-title">
+                        <span style="color:var(--green);font-size:16px;">⊕</span>
+                        NVIDIA NIM Configuration
+                    </h3>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;min-width:240px;">
+                            <label>API Key</label>
+                            <input type="password" id="nvidia-api-key" placeholder="nvapi-…">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end; gap: 12px;">
+                            <button class="btn" onclick="saveNvidiaConfig()">Save & Test</button>
+                            <div id="nvidia-status-text" class="status-text" style="margin-top: 0; margin-bottom: 9px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fallback Rules -->
+                <div class="config-panel">
+                    <h3 class="config-panel-title">
+                        <span style="color:var(--amber);font-size:16px;">↺</span>
+                        Fallback Rules
+                    </h3>
+                    <p style="font-size:12px;color:var(--text-3);margin-bottom:18px;line-height:1.5;">
+                        Configure fallback models for automatic failover when a primary model is unavailable.
+                    </p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Primary Model</label>
+                            <select id="fb-primary"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Fallback Model</label>
+                            <select id="fb-fallback"></select>
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end; gap: 12px;">
+                            <button class="btn" onclick="addFallback()">Add Rule</button>
+                            <div id="fb-status-text" class="status-text" style="margin-top: 0; margin-bottom: 9px;"></div>
+                        </div>
+                    </div>
+                    <div id="fallback-list" style="margin-top:18px;"></div>
+                </div>
+            </section>
+
+            <!-- API Reference Section -->
+            <section id="api" class="section">
+                <div class="section-header">
+                    <h2 class="section-title">API Reference</h2>
+                </div>
+                <div class="panel">
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Endpoint</th>
+                                    <th>Description</th>
+                                    <th>Example</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>GET /health</code></td>
+                                    <td style="color:var(--text-2);">System health check</td>
+                                    <td><code>curl http://localhost:8128/health</code></td>
+                                </tr>
+                                <tr>
+                                    <td><code>GET /models</code></td>
+                                    <td style="color:var(--text-2);">List available models</td>
+                                    <td><code>curl http://localhost:8128/models</code></td>
+                                </tr>
+                                <tr>
+                                    <td><code>POST /api/registry/refresh</code></td>
+                                    <td style="color:var(--text-2);">Refresh model registry</td>
+                                    <td><code>curl -X POST http://localhost:8128/api/registry/refresh</code></td>
+                                </tr>
+                                <tr>
+                                    <td><code>POST /api/generate</code></td>
+                                    <td style="color:var(--text-2);">Generate completion (Ollama-compatible)</td>
+                                    <td><code>curl -X POST .../api/generate -d '{…}'</code></td>
+                                </tr>
+                                <tr>
+                                    <td><code>POST /api/chat</code></td>
+                                    <td style="color:var(--text-2);">Chat completion (Ollama-compatible)</td>
+                                    <td><code>curl -X POST .../api/chat -d '{…}'</code></td>
+                                </tr>
+                                <tr>
+                                    <td><code>GET /stats</code></td>
+                                    <td style="color:var(--text-2);">Usage statistics</td>
+                                    <td><code>curl http://localhost:8128/stats</code></td>
+                                </tr>
+                                <tr>
+                                    <td><code>GET /api/decisions</code></td>
+                                    <td style="color:var(--text-2);">Routing decision log</td>
+                                    <td><code>curl http://localhost:8128/api/decisions</code></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </div><!-- /page -->
+
+        <footer>
+            IntelliProxy v3.0 — Intelligent LLM Routing &bull; Built with ❤️ by Torsten Weber
+        </footer>
+
+    </div><!-- /main-content -->
+
 </div><!-- /app-shell -->
 
 <script src="/static/js/dashboard.js"></script>

@@ -172,7 +172,7 @@ function renderFallbacks(fbConfig) {
 async function saveOllamaConfig() {
   const host = document.getElementById('ollama-host').value;
   const port = parseInt(document.getElementById('ollama-port').value);
-  const statusEl = document.getElementById('ollama-status');
+  const statusEl = document.getElementById('ollama-status-text');
 
   try {
     const res = await fetch(`${API_URL}/api/config/ollama`, {
@@ -200,15 +200,17 @@ async function saveOllamaConfig() {
 async function saveNvidiaConfig() {
   const apiKey = document.getElementById('nvidia-api-key').value;
   const statusEl = document.getElementById('nvidia-status');
+  const statusElMsg = document.getElementById('nvidia-status-text');
+
 
   if (!apiKey.trim()) {
-    statusEl.textContent = '⚠ Please enter an API key';
-    statusEl.style.color = 'var(--amber)';
+    statusElMsg.textContent = '⚠ Please enter an API key';
+    statusElMsg.style.color = 'var(--amber)';
     return;
   }
 
-  statusEl.textContent = 'Testing NVIDIA configuration…';
-  statusEl.style.color = 'var(--text-3)';
+  statusElMsg.textContent = 'Testing NVIDIA configuration…';
+  statusElMsg.style.color = 'var(--text-3)';
 
   try {
     const res = await fetch(`${API_URL}/api/config/nvidia`, {
@@ -219,15 +221,15 @@ async function saveNvidiaConfig() {
 
     const data = await res.json();
     if (res.ok) {
-      statusEl.textContent = `✓ ${data.message || 'NVIDIA configuration saved'}`;
-      statusEl.style.color = 'var(--green)';
+      statusElMsg.textContent = `✓ ${data.message || 'NVIDIA configuration saved'}`;
+      statusElMsg.style.color = 'var(--green)';
       setTimeout(loadAllData, 1000);
     } else {
-      statusEl.textContent = `✗ ${data.detail || 'Failed to save configuration'}`;
+      statusElMsg.textContent = `✗ ${data.detail || 'Failed to save configuration'}`;
       statusEl.style.color = 'var(--red)';
     }
   } catch (e) {
-    statusEl.textContent = '✗ Network error. Please check your connection.';
+    statusElMsg.textContent = '✗ Network error. Please check your connection.';
     statusEl.style.color = 'var(--red)';
   }
 }
@@ -238,11 +240,11 @@ async function saveNvidiaConfig() {
 async function addFallback() {
   const primary = document.getElementById('fb-primary').value;
   const fallback = document.getElementById('fb-fallback').value;
-  const statusEl = document.getElementById('fb-status');
+  const statusElMsg = document.getElementById('fb-status-text');
 
   if (!primary || !fallback || primary === fallback) {
-    statusEl.textContent = '⚠ Please select two different models';
-    statusEl.style.color = 'var(--amber)';
+    statusElMsg.textContent = '⚠ Please select two different models';
+    statusElMsg.style.color = 'var(--amber)';
     return;
   }
 
@@ -254,16 +256,16 @@ async function addFallback() {
     });
 
     if (res.ok) {
-      statusEl.textContent = '✓ Fallback rule added';
-      statusEl.style.color = 'var(--green)';
+      statusElMsg.textContent = '✓ Fallback rule added';
+      statusElMsg.style.color = 'var(--green)';
       loadAllData();
       populateModelSelects();
     } else {
       throw new Error('Failed');
     }
   } catch (e) {
-    statusEl.textContent = '✗ Error adding fallback rule';
-    statusEl.style.color = 'var(--red)';
+    statusElMsg.textContent = '✗ Error adding fallback rule';
+    statusElMsg.style.color = 'var(--red)';
   }
 }
 
