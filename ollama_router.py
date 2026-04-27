@@ -72,8 +72,8 @@ setup_logging(CONFIG.get('proxy', {}).get('log_level', 'info'))
 # GLOBAL CONFIGURATION
 # ============================================================================
 OLLAMA_TARGET = {
-    "host": os.getenv("OLLAMA_HOST", os.getenv("OLLAMA_SERVICE_HOST", "localhost")),
-    "port": int(os.getenv("OLLAMA_PORT", os.getenv("OLLAMA_SERVICE_PORT", "8128"))),
+    "host": os.getenv("OLLAMA_HOST", os.getenv("OLLAMA_SERVICE_HOST", "127.0.0.1")),
+    "port": int(os.getenv("OLLAMA_PORT", os.getenv("OLLAMA_SERVICE_PORT", "11434")))
 }
 OLLAMA_TARGET["base_url"] = f"http://{OLLAMA_TARGET['host']}:{OLLAMA_TARGET['port']}"
 

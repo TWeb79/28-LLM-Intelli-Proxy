@@ -1,667 +1,334 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IntelliProxy — Intelligent LLM Router</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg: #0a0a0a;
-            --bg-secondary: #111111;
-            --bg-tertiary: #1a1a1a;
-            --border: #2a2a2a;
-            --text: #f0f0f0;
-            --text-secondary: #a0a0a0;
-            --accent: #3b82f6;
-            --accent-green: #22c55e;
-            --accent-yellow: #eab308;
-            --accent-red: #ef4444;
-            --accent-orange: #f97316;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
-        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; }
-        header { position: sticky; top: 0; background: rgba(10, 10, 10, 0.95); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
-        .brand { display: flex; align-items: center; gap: 12px; }
-        .brand-logo { width: 28px; height: 28px; background: linear-gradient(135deg, var(--accent), var(--accent-green)); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: white; }
-        .brand-name { font-size: 16px; font-weight: 600; color: var(--text); }
-        .brand-badge { font-size: 10px; padding: 2px 6px; background: var(--border); border-radius: 4px; color: var(--text-secondary); }
-        nav { display: flex; gap: 4px; }
-        nav a { padding: 6px 12px; font-size: 13px; color: var(--text-secondary); text-decoration: none; border-radius: 6px; transition: all 0.2s; font-weight: 500; }
-        nav a:hover, nav a.active { color: var(--text); background: var(--bg-tertiary); }
-        .status-indicators { display: flex; gap: 16px; align-items: center; }
-        .status-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-red); }
-        .status-dot.healthy { background: var(--accent-green); }
-        .status-dot.warning { background: var(--accent-yellow); }
-        main { max-width: 1400px; margin: 0 auto; padding: 32px 24px; }
-        .section { margin-bottom: 48px; }
-        .section-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: all 0.2s; }
-        .card:hover { border-color: var(--accent); transform: translateY(-2px); }
-        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-        .card-title { font-size: 14px; font-weight: 600; color: var(--text); }
-        .card-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 16px; }
-        .card-value { font-size: 28px; font-weight: 700; color: var(--text); margin-bottom: 4px; font-family: 'JetBrains Mono', monospace; }
-        .card-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
-        .table-container { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
-        th { background: var(--bg-tertiary); font-weight: 600; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-        tr:last-child td { border-bottom: none; }
-        tr:hover td { background: var(--bg-tertiary); }
-        .badge { display: inline-block; padding: 3px 10px; font-size: 11px; font-weight: 600; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge-green { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
-        .badge-blue { background: rgba(59, 130, 246, 0.2); color: var(--accent); }
-        .badge-yellow { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }
-        .badge-red { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
-        .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-        .form-group { display: flex; flex-direction: column; gap: 6px; }
-        label { font-size: 12px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
-        input, select { padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; min-width: 160px; transition: border-color 0.2s; }
-        input:focus, select:focus { outline: none; border-color: var(--accent); }
-        .btn { padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-        .btn:hover { background: #2563eb; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary { background: var(--bg-tertiary); color: var(--text); border: 1px solid var(--border); }
-        .btn-secondary:hover { background: var(--border); }
-        .btn-danger { background: var(--accent-red); }
-        .btn-danger:hover { background: #dc2626; }
-        .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .empty { text-align: center; padding: 40px; color: var(--text-secondary); font-size: 14px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IntelliProxy — Intelligent LLM Router</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
-    <header>
-        <div class="brand">
-            <div class="brand-logo">IP</div>
-            <span class="brand-name">IntelliProxy</span>
-            <span class="brand-badge">v3.0</span>
+
+<div class="app-shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-lockup">
+        <div class="brand-logo">IP</div>
+        <span class="brand-text">IntelliProxy</span>
+      </div>
+      <span class="brand-version">v3.0</span>
+    </div>
+
+    <div class="sidebar-nav">
+      <div class="nav-label">Navigation</div>
+      <nav>
+        <a href="#overview" class="active">
+          <span class="nav-icon">◈</span> Overview
+        </a>
+        <a href="#models">
+          <span class="nav-icon">⬡</span> Models
+        </a>
+        <a href="#performance">
+          <span class="nav-icon">◎</span> Performance
+        </a>
+        <a href="#configuration">
+          <span class="nav-icon">⊞</span> Configuration
+        </a>
+        <a href="#api">
+          <span class="nav-icon">⌁</span> API Reference
+        </a>
+      </nav>
+    </div>
+
+    <div class="sidebar-status">
+      <div class="status-label">Service Health</div>
+      <div class="status-item">
+        <div class="status-item-left">
+          <div class="status-dot" id="ollama-status"></div>
+          <span>Ollama</span>
         </div>
-        <nav>
-            <a href="#overview">Overview</a>
-            <a href="#models">Models</a>
-            <a href="#performance">Performance</a>
-            <a href="#configuration">Configuration</a>
-            <a href="#api">API</a>
-        </nav>
-        <div class="status-indicators">
-            <div class="status-item">
-                <div class="status-dot" id="ollama-status"></div>
-                <span>Ollama</span>
-            </div>
-            <div class="status-item">
-                <div class="status-dot" id="nvidia-status"></div>
-                <span>NVIDIA</span>
-            </div>
-            <div class="status-item">
-                <div class="status-dot healthy" id="router-status"></div>
-                <span>IntelliProxy</span>
-            </div>
+      </div>
+      <div class="status-item">
+        <div class="status-item-left">
+          <div class="status-dot" id="nvidia-status"></div>
+          <span>NVIDIA NIM</span>
         </div>
-    </header>
+      </div>
+      <div class="status-item">
+        <div class="status-item-left">
+          <div class="status-dot healthy" id="router-status"></div>
+          <span>Router</span>
+        </div>
+      </div>
+    </div>
+  </aside>
 
-    <main>
-        <!-- Overview Section -->
-        <section id="overview" class="section">
-            <h2 class="section-title">System Overview</h2>
-            <div class="grid">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Total Requests</div>
-                        <div class="card-icon">📊</div>
-                    </div>
-                    <div class="card-value" id="total-requests">0</div>
-                    <div class="card-label">Requests routed</div>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Models Available</div>
-                        <div class="card-icon">🧠</div>
-                    </div>
-                    <div class="card-value" id="models-count">0</div>
-                    <div class="card-label">From all providers</div>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Cache Hit Rate</div>
-                        <div class="card-icon">⚡</div>
-                    </div>
-                    <div class="card-value" id="cache-hit-rate">0%</div>
-                    <div class="card-label">Task classification cache</div>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">System Status</div>
-                        <div class="card-icon">🔧</div>
-                    </div>
-                    <div class="card-value" id="system-status">Checking...</div>
-                    <div class="card-label">Overall health</div>
-                </div>
-            </div>
-        </section>
+  <!-- Main Content -->
+  <div class="main-content">
 
-        <!-- Models Section -->
-        <section id="models" class="section">
-            <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
-                <span>Available Models</span>
-                <button class="btn btn-secondary" onclick="refreshModels()">🔄 Refresh</button>
-            </div>
-            <div class="table-container">
-                <table id="models-table">
-                    <thead>
-                        <tr>
-                            <th>Model</th>
-                            <th>Provider</th>
-                            <th>Category</th>
-                            <th>Speed</th>
-                            <th>Complexity</th>
-                            <th>Requests</th>
-                            <th>Avg Time</th>
-                        </tr>
-                    </thead>
-                    <tbody id="models-body"></tbody>
-                </table>
-            </div>
-        </section>
+    <!-- Top Bar -->
+    <div class="topbar">
+      <span class="topbar-title">LLM Routing Dashboard</span>
+      <div class="topbar-meta">
+        <span>localhost:8128</span>
+        <span style="color:var(--green);">● LIVE</span>
+      </div>
+    </div>
 
-        <!-- Performance Section -->
-        <section id="performance" class="section">
-            <h2 class="section-title">Performance Test</h2>
-            <div class="card" style="margin-bottom:16px;">
-                <div class="form-row">
-                    <div class="form-group" style="flex:1;">
-                        <label>Test Prompt</label>
-                        <input type="text" id="perf-prompt" value="Write a Python function to reverse a linked list.">
-                    </div>
-                    <div class="form-group">
-                        <label>&nbsp;</label>
-                        <button class="btn" onclick="runPerfTest()" id="perf-btn">▶ Run Test</button>
-                    </div>
-                </div>
-                <p id="perf-status" style="font-size:12px;color:var(--text-secondary);margin-top:8px;"></p>
-            </div>
-            <div class="table-container">
-                <table id="perf-table">
-                    <thead>
-                        <tr>
-                            <th>Mode</th>
-                            <th>Model</th>
-                            <th>Duration</th>
-                            <th>Tokens</th>
-                            <th>Response Preview</th>
-                        </tr>
-                    </thead>
-                    <tbody id="perf-body"></tbody>
-                </table>
-            </div>
-        </section>
+    <div class="page">
 
-        <!-- Configuration Section -->
-        <section id="configuration" class="section">
-            <h2 class="section-title">Configuration</h2>
-            
-            <!-- Ollama Target -->
-            <div class="card" style="margin-bottom:16px;">
-                <h3 style="font-size:16px;font-weight:600;margin-bottom:12px;">🎯 Ollama Connection</h3>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Host</label>
-                        <input type="text" id="ollama-host" placeholder="localhost">
-                    </div>
-                    <div class="form-group">
-                        <label>Port</label>
-                        <input type="number" id="ollama-port" placeholder="11434">
-                    </div>
-                    <div class="form-group" style="justify-content:flex-end;">
-                        <button class="btn" onclick="saveOllamaConfig()">Save</button>
-                    </div>
-                </div>
-                <p id="ollama-status" style="font-size:12px;margin-top:8px;"></p>
+      <!-- Overview Section -->
+      <section id="overview" class="section">
+        <div class="section-header">
+          <h2 class="section-title">System Overview</h2>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-label">Total Requests</div>
+              <div class="metric-icon">📊</div>
             </div>
+            <div class="metric-value" id="total-requests">0</div>
+            <div class="metric-sub">Requests routed</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-label">Models Available</div>
+              <div class="metric-icon">🧠</div>
+            </div>
+            <div class="metric-value" id="models-count">0</div>
+            <div class="metric-sub">From all providers</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-label">Cache Hit Rate</div>
+              <div class="metric-icon">⚡</div>
+            </div>
+            <div class="metric-value" id="cache-hit-rate">0%</div>
+            <div class="metric-sub">Task classification cache</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-header">
+              <div class="metric-label">System Status</div>
+              <div class="metric-icon">🔧</div>
+            </div>
+            <div class="metric-value" id="system-status">—</div>
+            <div class="metric-sub">Overall health</div>
+          </div>
+        </div>
+      </section>
 
-            <!-- NVIDIA Configuration -->
-            <div class="card" style="margin-bottom:16px;">
-                <h3 style="font-size:16px;font-weight:600;margin-bottom:12px;">🟢 NVIDIA NIM Configuration</h3>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>API Key</label>
-                        <input type="password" id="nvidia-api-key" placeholder="nvapi-...">
-                    </div>
-                    <div class="form-group" style="justify-content:flex-end;">
-                        <button class="btn" onclick="saveNvidiaConfig()">Save</button>
-                    </div>
-                </div>
-                <p id="nvidia-status" style="font-size:12px;margin-top:8px;"></p>
-            </div>
+      <!-- Models Section -->
+      <section id="models" class="section">
+        <div class="section-header">
+          <h2 class="section-title">Available Models</h2>
+          <button class="btn btn-secondary" onclick="refreshModels()">↻&nbsp; Refresh</button>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table id="models-table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th>Provider</th>
+                  <th>Category</th>
+                  <th>Speed</th>
+                  <th>Complexity</th>
+                  <th>Requests</th>
+                  <th>Avg Time</th>
+                </tr>
+              </thead>
+              <tbody id="models-body">
+                <tr><td colspan="7" class="empty">Loading models…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
-            <!-- Fallback Configuration -->
-            <div class="card">
-                <h3 style="font-size:16px;font-weight:600;margin-bottom:12px;">🔁 Fallback Rules</h3>
-                <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;">
-                    Configure fallback models for automatic failover when a model is unavailable.
-                </p>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Primary Model</label>
-                        <select id="fb-primary"></select>
-                    </div>
-                    <div class="form-group">
-                        <label>Fallback Model</label>
-                        <select id="fb-fallback"></select>
-                    </div>
-                    <div class="form-group" style="justify-content:flex-end;">
-                        <button class="btn" onclick="addFallback()">Add Rule</button>
-                    </div>
-                </div>
-                <p id="fb-status" style="font-size:12px;margin-top:8px;"></p>
-                <div id="fallback-list" style="margin-top:16px;"></div>
-            </div>
-        </section>
+      <!-- Performance Section -->
+      <section id="performance" class="section">
+        <div class="section-header">
+          <h2 class="section-title">Performance Test</h2>
+        </div>
 
-        <!-- API Reference -->
-        <section id="api" class="section">
-            <h2 class="section-title">API Reference</h2>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Endpoint</th>
-                            <th>Description</th>
-                            <th>Example</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><code>GET /health</code></td>
-                            <td>System health check</td>
-                            <td><code>curl http://localhost:8128/health</code></td>
-                        </tr>
-                        <tr>
-                            <td><code>GET /models</code></td>
-                            <td>List available models</td>
-                            <td><code>curl http://localhost:8128/models</code></td>
-                        </tr>
-                        <tr>
-                            <td><code>POST /api/registry/refresh</code></td>
-                            <td>Refresh model registry</td>
-                            <td><code>curl -X POST http://localhost:8128/api/registry/refresh</code></td>
-                        </tr>
-                        <tr>
-                            <td><code>POST /api/generate</code></td>
-                            <td>Generate completion (Ollama-compatible)</td>
-                            <td><code>curl -X POST .../api/generate -d '{"model":"...","prompt":"..."}'</code></td>
-                        </tr>
-                        <tr>
-                            <td><code>POST /api/chat</code></td>
-                            <td>Chat completion (Ollama-compatible)</td>
-                            <td><code>curl -X POST .../api/chat -d '{"model":"...","messages":[...]}'</code></td>
-                        </tr>
-                        <tr>
-                            <td><code>GET /stats</code></td>
-                            <td>Usage statistics</td>
-                            <td><code>curl http://localhost:8128/stats</code></td>
-                        </tr>
-                        <tr>
-                            <td><code>GET /api/decisions</code></td>
-                            <td>Routing decision log</td>
-                            <td><code>curl http://localhost:8128/api/decisions</code></td>
-                        </tr>
-                    </tbody>
-                </table>
+        <div class="perf-panel">
+          <div class="form-row">
+            <div class="form-group" style="flex:1;min-width:260px;">
+              <label>Test Prompt</label>
+              <input type="text" id="perf-prompt" value="Write a Python function to reverse a linked list.">
             </div>
-        </section>
-    </main>
+            <div class="form-group">
+              <button class="btn" onclick="runPerfTest()" id="perf-btn">▶&nbsp; Run Test</button>
+            </div>
+          </div>
+          <p id="perf-status" class="status-text"></p>
+        </div>
+
+        <div class="panel">
+          <div class="table-wrap">
+            <table id="perf-table">
+              <thead>
+                <tr>
+                  <th>Mode</th>
+                  <th>Model</th>
+                  <th>Duration</th>
+                  <th>Tokens</th>
+                  <th>Response Preview</th>
+                </tr>
+              </thead>
+              <tbody id="perf-body">
+                <tr><td colspan="5" class="empty">Run a test to see results</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Configuration Section -->
+      <section id="configuration" class="section">
+        <div class="section-header">
+          <h2 class="section-title">Configuration</h2>
+        </div>
+
+        <!-- Ollama -->
+        <div class="config-panel">
+          <h3 class="config-panel-title">
+            <span style="color:var(--cyan);font-size:16px;">⊕</span>
+            Ollama Connection
+          </h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Host</label>
+              <input type="text" id="ollama-host" placeholder="localhost">
+            </div>
+            <div class="form-group">
+              <label>Port</label>
+              <input type="number" id="ollama-port" placeholder="11434" style="min-width:100px;">
+            </div>
+            <div class="form-group">
+              <button class="btn" onclick="saveOllamaConfig()">Save Configuration</button>
+            </div>
+          </div>
+          <p id="ollama-status" class="status-text"></p>
+        </div>
+
+        <!-- NVIDIA -->
+        <div class="config-panel">
+          <h3 class="config-panel-title">
+            <span style="color:var(--green);font-size:16px;">⊕</span>
+            NVIDIA NIM Configuration
+          </h3>
+          <div class="form-row">
+            <div class="form-group" style="flex:1;min-width:240px;">
+              <label>API Key</label>
+              <input type="password" id="nvidia-api-key" placeholder="nvapi-…">
+            </div>
+            <div class="form-group">
+              <button class="btn" onclick="saveNvidiaConfig()">Save & Test</button>
+            </div>
+          </div>
+          <p id="nvidia-status" class="status-text"></p>
+        </div>
+
+        <!-- Fallback Rules -->
+        <div class="config-panel">
+          <h3 class="config-panel-title">
+            <span style="color:var(--amber);font-size:16px;">↺</span>
+            Fallback Rules
+          </h3>
+          <p style="font-size:12px;color:var(--text-3);margin-bottom:18px;line-height:1.5;">
+            Configure fallback models for automatic failover when a primary model is unavailable.
+          </p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Primary Model</label>
+              <select id="fb-primary"></select>
+            </div>
+            <div class="form-group">
+              <label>Fallback Model</label>
+              <select id="fb-fallback"></select>
+            </div>
+            <div class="form-group">
+              <button class="btn" onclick="addFallback()">Add Rule</button>
+            </div>
+          </div>
+          <p id="fb-status" class="status-text"></p>
+          <div id="fallback-list" style="margin-top:18px;"></div>
+        </div>
+      </section>
+
+      <!-- API Reference Section -->
+      <section id="api" class="section">
+        <div class="section-header">
+          <h2 class="section-title">API Reference</h2>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Endpoint</th>
+                  <th>Description</th>
+                  <th>Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GET /health</code></td>
+                  <td style="color:var(--text-2);">System health check</td>
+                  <td><code>curl http://localhost:8128/health</code></td>
+                </tr>
+                <tr>
+                  <td><code>GET /models</code></td>
+                  <td style="color:var(--text-2);">List available models</td>
+                  <td><code>curl http://localhost:8128/models</code></td>
+                </tr>
+                <tr>
+                  <td><code>POST /api/registry/refresh</code></td>
+                  <td style="color:var(--text-2);">Refresh model registry</td>
+                  <td><code>curl -X POST http://localhost:8128/api/registry/refresh</code></td>
+                </tr>
+                <tr>
+                  <td><code>POST /api/generate</code></td>
+                  <td style="color:var(--text-2);">Generate completion (Ollama-compatible)</td>
+                  <td><code>curl -X POST .../api/generate -d '{…}'</code></td>
+                </tr>
+                <tr>
+                  <td><code>POST /api/chat</code></td>
+                  <td style="color:var(--text-2);">Chat completion (Ollama-compatible)</td>
+                  <td><code>curl -X POST .../api/chat -d '{…}'</code></td>
+                </tr>
+                <tr>
+                  <td><code>GET /stats</code></td>
+                  <td style="color:var(--text-2);">Usage statistics</td>
+                  <td><code>curl http://localhost:8128/stats</code></td>
+                </tr>
+                <tr>
+                  <td><code>GET /api/decisions</code></td>
+                  <td style="color:var(--text-2);">Routing decision log</td>
+                  <td><code>curl http://localhost:8128/api/decisions</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /page -->
 
     <footer>
-        IntelliProxy v3.0 — Intelligent LLM Routing &bull; Built with ❤️ by Torsten Weber
+      IntelliProxy v3.0 — Intelligent LLM Routing &bull; Built with ❤️ by Torsten Weber
     </footer>
 
-    <script>
-        const API_URL = `http://${window.location.hostname}:8128`;
+  </div><!-- /main-content -->
+</div><!-- /app-shell -->
 
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            loadAllData();
-            loadConfiguration();
-            setInterval(loadAllData, 15000);
-        });
+<script src="/static/js/dashboard.js"></script>
 
-        async function loadConfiguration() {
-            try {
-                const [ollamaConfig, nvidiaConfig] = await Promise.all([
-                    fetch(`${API_URL}/api/config/ollama`).then(r => r.json()),
-                    fetch(`${API_URL}/api/config/nvidia`).then(r => r.json())
-                ]);
-
-                // Only pre-fill if fields are empty (not user-modified)
-                const ollamaHost = document.getElementById('ollama-host');
-                const ollamaPort = document.getElementById('ollama-port');
-                const nvidiaApiKey = document.getElementById('nvidia-api-key');
-
-                if (!ollamaHost.value) {
-                    ollamaHost.value = ollamaConfig.host || 'localhost';
-                }
-                if (!ollamaPort.value) {
-                    ollamaPort.value = ollamaConfig.port || 11434;
-                }
-                if (!nvidiaApiKey.value) {
-                    nvidiaApiKey.value = nvidiaConfig.api_key || '';
-                }
-
-            } catch (e) {
-                console.error('Failed to load configuration:', e);
-                // Use defaults if config loading fails
-                if (!document.getElementById('ollama-host').value) {
-                    document.getElementById('ollama-host').value = 'localhost';
-                }
-                if (!document.getElementById('ollama-port').value) {
-                    document.getElementById('ollama-port').value = 11434;
-                }
-            }
-        }
-
-        async function loadAllData() {
-            try {
-                const [healthRes, statsRes, modelsRes] = await Promise.all([
-                    fetch(`${API_URL}/health`),
-                    fetch(`${API_URL}/stats`),
-                    fetch(`${API_URL}/models`)
-                ]);
-
-                const health = await healthRes.json();
-                const stats = await statsRes.json();
-                const models = await modelsRes.json();
-
-                // Status indicators
-                document.getElementById('ollama-status').className = `status-dot ${health.ollama?.status === 'running' ? 'healthy' : ''}`;
-                document.getElementById('nvidia-status').className = `status-dot ${health.nvidia?.status === 'running' ? 'healthy' : ''}`;
-                document.getElementById('router-status').className = `status-dot ${health.overall_status === 'healthy' ? 'healthy' : 'warning'}`;
-
-                // Stats
-                document.getElementById('total-requests').textContent = stats.requests?.total_requests || 0;
-                document.getElementById('models-count').textContent = models.total || 0;
-                document.getElementById('cache-hit-rate').textContent = stats.cache?.hit_rate || '0%';
-                document.getElementById('system-status').textContent = health.overall_status === 'healthy' ? 'Healthy' : 'Degraded';
-                document.getElementById('system-status').className = 'badge ' + (health.overall_status === 'healthy' ? 'badge-green' : 'badge-red');
-
-                // Models table
-                renderModelsTable(models, stats);
-
-                // Fallback list
-                renderFallbacks(await fetch(`${API_URL}/api/config/fallbacks`).then(r => r.json()));
-
-            } catch (e) {
-                console.error('Failed to load data:', e);
-            }
-        }
-
-        function renderModelsTable(models, stats) {
-            const tbody = document.getElementById('models-body');
-            tbody.innerHTML = '';
-            const modelStats = stats.requests?.models || {};
-            const modelAvgTimes = stats.requests?.model_avg_times || {};
-            const categories = models.categories || {};
-
-            // Build model list with stats
-            Object.entries(models.models || {}).forEach(([name, data]) => {
-                const stat = modelStats[name] || { count: 0, total_time: 0 };
-                const avgTime = modelAvgTimes[name] || 0;
-                const provider = data.provider || 'ollama';
-                const category = Object.entries(categories).find(([_, list]) => list.includes(name))?.[0] || 'general';
-                
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td><strong>${name}</strong></td>
-                    <td>${provider}</td>
-                    <td><span class="badge badge-blue">${category}</span></td>
-                    <td>${data.speed || '-'}/10</td>
-                    <td>${data.complexity || '-'}/10</td>
-                    <td>${stat.count}</td>
-                    <td>${avgTime}s</td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        function renderFallbacks(fbConfig) {
-            const container = document.getElementById('fallback-list');
-            const fallbacks = fbConfig.fallbacks || {};
-            
-            if (Object.keys(fallbacks).length === 0) {
-                container.innerHTML = '<p style="color:var(--text-secondary);text-align:center;padding:20px;">No fallback rules configured.</p>';
-                return;
-            }
-
-            let html = '<table><thead><tr><th>Model</th><th>Fallback</th><th>Action</th></tr></thead><tbody>';
-            Object.entries(fallbacks).forEach(([model, fallback]) => {
-                html += `<tr>
-                    <td>${model}</td>
-                    <td><span class="badge badge-green">${fallback}</span></td>
-                    <td><button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="removeFallback('${model}')">Remove</button></td>
-                </tr>`;
-            });
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        }
-
-        async function saveOllamaConfig() {
-            const host = document.getElementById('ollama-host').value;
-            const port = parseInt(document.getElementById('ollama-port').value);
-            const statusEl = document.getElementById('ollama-status');
-            
-            try {
-                const res = await fetch(`${API_URL}/api/config/ollama`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ host, port })
-                });
-                
-                if (res.ok) {
-                    statusEl.textContent = '✅ Configuration saved';
-                    statusEl.style.color = 'var(--accent-green)';
-                    setTimeout(loadAllData, 1000);
-                } else {
-                    throw new Error('Failed to save');
-                }
-            } catch (e) {
-                statusEl.textContent = '❌ Error saving configuration';
-                statusEl.style.color = 'var(--accent-red)';
-            }
-        }
-
-        async function saveNvidiaConfig() {
-            const apiKey = document.getElementById('nvidia-api-key').value;
-            const statusEl = document.getElementById('nvidia-status');
-            
-            if (!apiKey.trim()) {
-                statusEl.textContent = '⚠️ Please enter an API key';
-                statusEl.style.color = 'var(--accent-yellow)';
-                return;
-            }
-
-            statusEl.textContent = '⏳ Testing NVIDIA configuration...';
-            statusEl.style.color = 'var(--text-secondary)';
-            
-            try {
-                const res = await fetch(`${API_URL}/api/config/nvidia`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey })
-                });
-                
-                const data = await res.json();
-                if (res.ok) {
-                    statusEl.textContent = `✅ ${data.message || 'NVIDIA configuration saved'}`;
-                    statusEl.style.color = 'var(--accent-green)';
-                    setTimeout(loadAllData, 1000);
-                } else {
-                    const error = data.detail || 'Failed to save configuration';
-                    statusEl.textContent = `❌ ${error}`;
-                    statusEl.style.color = 'var(--accent-red)';
-                }
-            } catch (e) {
-                statusEl.textContent = '❌ Network error. Please check your connection.';
-                statusEl.style.color = 'var(--accent-red)';
-            }
-        }
-
-        async function addFallback() {
-            const primary = document.getElementById('fb-primary').value;
-            const fallback = document.getElementById('fb-fallback').value;
-            const statusEl = document.getElementById('fb-status');
-
-            if (!primary || !fallback || primary === fallback) {
-                statusEl.textContent = '⚠️ Please select two different models';
-                statusEl.style.color = 'var(--accent-yellow)';
-                return;
-            }
-
-            try {
-                const res = await fetch(`${API_URL}/api/config/fallbacks`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ fallbacks: { [primary]: fallback } })
-                });
-                
-                if (res.ok) {
-                    statusEl.textContent = '✅ Fallback rule added';
-                    statusEl.style.color = 'var(--accent-green)';
-                    loadAllData();
-                    populateModelSelects();
-                } else {
-                    throw new Error('Failed');
-                }
-            } catch (e) {
-                statusEl.textContent = '❌ Error adding fallback';
-                statusEl.style.color = 'var(--accent-red)';
-            }
-        }
-
-        async function removeFallback(model) {
-            if (!confirm(`Remove fallback for "${model}"?`)) return;
-            
-            try {
-                const res = await fetch(`${API_URL}/api/config/fallbacks`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
-                });
-                loadAllData();
-            } catch (e) {
-                console.error('Remove failed:', e);
-            }
-        }
-
-        async function refreshModels() {
-            const btn = event.target;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> Refreshing...';
-            
-            try {
-                const response = await fetch(`${API_URL}/api/registry/refresh`, { method: 'POST' });
-                const data = await response.json();
-                
-                if (data.status === 'completed') {
-                    console.log('Refresh completed:', data);
-                    
-                    // Force immediate data refresh
-                    await loadAllData();
-                    
-                    // Show success notification
-                    const notification = document.createElement('div');
-                    notification.className = 'alert alert-success';
-                    notification.style.cssText = 'position:fixed;top:20px;right:20px;z-index:1000;max-width:300px;';
-                    notification.innerHTML = `
-                        <strong>✅ Refresh completed!</strong><br>
-                        Total models: ${data.total_models || 0}<br>
-                        Ollama: ${data.providers?.ollama?.models || 0} models<br>
-                        NVIDIA: ${data.providers?.nvidia?.models || 0} models
-                    `;
-                    document.body.appendChild(notification);
-                    setTimeout(() => notification.remove(), 5000);
-                }
-                
-                btn.disabled = false;
-                btn.textContent = '🔄 Refresh';
-            } catch (e) {
-                console.error('Refresh failed:', e);
-                
-                const notification = document.createElement('div');
-                notification.className = 'alert alert-error';
-                notification.style.cssText = 'position:fixed;top:20px;right:20px;z-index:1000;max-width:300px;';
-                notification.innerHTML = `
-                    <strong>❌ Refresh failed</strong><br>
-                    ${e.message || 'Check console for details'}
-                `;
-                document.body.appendChild(notification);
-                setTimeout(() => notification.remove(), 5000);
-                
-                btn.disabled = false;
-                btn.textContent = '🔄 Refresh';
-            }
-        }
-
-        async function runPerfTest() {
-            const btn = document.getElementById('perf-btn');
-            const status = document.getElementById('perf-status');
-            const prompt = document.getElementById('perf-prompt').value;
-            const tbody = document.getElementById('perf-body');
-            
-            btn.disabled = true;
-            status.textContent = 'Running tests...';
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;"><span class="spinner"></span> Testing...</td></tr>';
-            
-            try {
-                const res = await fetch(`${API_URL}/performance-test`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt, mode: 'all' })
-                });
-                
-                const data = await res.json();
-                tbody.innerHTML = '';
-                data.results.forEach(r => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td><strong>${r.label}</strong></td>
-                        <td>${r.model}</td>
-                        <td>${r.duration}s</td>
-                        <td>${r.tokens}</td>
-                        <td style="font-size:12px;color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.response.substring(0, 80)}...</td>
-                    `;
-                    tbody.appendChild(row);
-                });
-                status.textContent = '✅ Test completed';
-            } catch (e) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--accent-red);">Error: ${e.message}</td></tr>`;
-                status.textContent = '❌ Test failed';
-            } finally {
-                btn.disabled = false;
-            }
-        }
-
-        function populateModelSelects() {
-            fetch(`${API_URL}/models`).then(r => r.json()).then(data => {
-                const models = Object.keys(data.models || {}).sort();
-                const select1 = document.getElementById('fb-primary');
-                const select2 = document.getElementById('fb-fallback');
-                select1.innerHTML = '<option value="">Select Model</option>';
-                select2.innerHTML = '<option value="">Select Fallback</option>';
-                models.forEach(m => {
-                    select1.innerHTML += `<option value="${m}">${m}</option>`;
-                    select2.innerHTML += `<option value="${m}">${m}</option>`;
-                });
-            });
-        }
-
-        // Initial population
-        populateModelSelects();
-    </script>
 </body>
 </html>
