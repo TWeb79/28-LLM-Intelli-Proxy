@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM debian:12-slim
 
 WORKDIR /app
 
@@ -6,7 +6,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python3 -m venv /app/venv
+ENV PATH="/app/venv/bin:$PATH"
 
 # Requirements zuerst (für Cache)
 COPY requirements.txt .

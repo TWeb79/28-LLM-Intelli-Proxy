@@ -11,8 +11,8 @@ Ports are grouped by service type:
 | Port Range | Service Type              |
 | ---------- | ------------------------- |
 | 8000       | Global overview dashboard |
-| 80xx       | Project web dashboards    |
-| 81xx       | FastAPI services          |
+| 80xx       | Project web dashboards  + FastAPI (to prevent CORS policy issues) |
+| 81xx       | FastAPI services  (optional alternative)        |
 | 82xx       | Databases                 |
 | 89xx       | LLM                       |
 
@@ -169,7 +169,7 @@ Suggested reserved ranges:
 
 ## Project 30 Allocation
 
-For this project, the following ports are allocated following the 8x30<environment> pattern:
+For project 30, the following ports are allocated following the 8x30 pattern:
 
 | Port | Service Type              | Docker Service   |
 | ---- | ---------------------- | ------------- |
@@ -180,6 +180,43 @@ For this project, the following ports are allocated following the 8x30<environme
 | 8430 | Vector database       | (reserved)    |
 | 8530 | Experimental services | (reserved)    |
 | 8630 | Admin tools           | (reserved)    |
+
+Pattern: `8` + service_category + project_number
+
+- Service category 0 = web dashboard (80xx)
+- Service category 1 = FastAPI (81xx)
+- Service category 2 = database (82xx)
+- Service category 3 = background workers (83xx)
+- Service category 4 = vector databases (84xx)
+- Service category 5 = experimental (85xx)
+- Service category 6 = admin tools (86xx)
+
+---
+
+## Project 35 Allocation
+
+For project 35 (FaceTrack — Video Face Analysis), the following ports are allocated following the 8x35 pattern:
+
+| Port | Service Type     | Usage                    |
+| ---- | --------------- | ----------------------- |
+| 8035 | Web dashboard   | FaceTrack UI (static)   |
+| 8135 | FastAPI service | (reserved — not used)   |
+| 8235 | Database        | (reserved — not used)   |
+| 8335 | Background workers | (reserved)        |
+| 8435 | Vector database | (reserved)              |
+| 8535 | Experimental services | (reserved)      |
+| 8635 | Admin tools     | (reserved)              |
+
+**Note:** FaceTrack is a purely client-side static application with no backend API or database. Only port 8035 (web dashboard) is actively used if served via a local HTTP server. All other service ports are reserved for potential future extensions.
+
+**Recommended local server command:**
+
+```bash
+# Serve on port 8035 consistently with naming convention
+npx http-server . -p 8035
+# or
+python -m http.server 8035
+```
 
 Pattern: `8` + service_category + project_number
 
